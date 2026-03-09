@@ -2,6 +2,7 @@ package br.com.conectabem.service;
 
 import br.com.conectabem.dto.user.RegisterRequest;
 import br.com.conectabem.model.User;
+import br.com.conectabem.model.UserRole;
 import br.com.conectabem.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,7 @@ class UserServiceImplTest {
         assertNotNull(created.getId());
         assertEquals("test@example.com", created.getEmail());
         assertNotNull(created.getPassword());
+        assertEquals(UserRole.USER.name(), created.getRole());
         assertTrue(passwordEncoder.matches("senha123", created.getPassword()));
 
         Optional<User> found = userRepository.findByEmail("test@example.com");

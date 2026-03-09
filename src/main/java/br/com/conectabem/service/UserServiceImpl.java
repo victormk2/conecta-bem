@@ -2,6 +2,7 @@ package br.com.conectabem.service;
 
 import br.com.conectabem.dto.user.RegisterRequest;
 import br.com.conectabem.model.User;
+import br.com.conectabem.model.UserRole;
 import br.com.conectabem.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ public class UserServiceImpl implements UserService{
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
+                .role(UserRole.USER.name())
                 .createdAt(Instant.now())
                 .build();
 

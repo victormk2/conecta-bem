@@ -23,5 +23,6 @@ class JwtUtilTest {
         Jws<Claims> parsed = jwtUtil.validateToken(token);
         assertEquals(id.toString(), parsed.getBody().getSubject());
         assertEquals("a@b.com", parsed.getBody().get("email"));
+        assertEquals(expirationMinutes, jwtUtil.getExpirationMinutes());
     }
 }

@@ -2,6 +2,8 @@ package br.com.conectabem.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -13,27 +15,31 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "users")
+@Table(name = "event_registrations")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class EventRegistration {
 
     @Id
     private UUID id;
 
-    @Column(nullable = false, unique = true)
-    private String email;
-
-    // stored password hash
     @Column(nullable = false)
-    private String password;
-
-    private String fullName;
+    private UUID eventId;
 
     @Column(nullable = false)
-    private String role;
+    private UUID volunteerId;
 
-    private Instant createdAt;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ParticipationStatus status;
+
+    @Column(length = 2000)
+    private String justification;
+
+    @Column(nullable = false)
+    private Instant registeredAt;
+
+    private Instant statusUpdatedAt;
 }

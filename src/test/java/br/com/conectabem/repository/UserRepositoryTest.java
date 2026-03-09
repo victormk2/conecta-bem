@@ -1,6 +1,7 @@
 package br.com.conectabem.repository;
 
 import br.com.conectabem.model.User;
+import br.com.conectabem.model.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,7 @@ class UserRepositoryTest {
                 .email("repo@example.com")
                 .password("HASH")
                 .fullName("Repo User")
+                .role(UserRole.USER.name())
                 .createdAt(Instant.now())
                 .build();
 
@@ -60,6 +62,7 @@ class UserRepositoryTest {
                 .email("findbyid@example.com")
                 .password("HASH")
                 .fullName("Find By ID")
+                .role(UserRole.USER.name())
                 .createdAt(Instant.now())
                 .build();
 
@@ -78,6 +81,7 @@ class UserRepositoryTest {
                 .email("update@example.com")
                 .password("OLD_HASH")
                 .fullName("Old Name")
+                .role(UserRole.USER.name())
                 .createdAt(Instant.now())
                 .build();
 
@@ -101,6 +105,7 @@ class UserRepositoryTest {
                 .email("delete@example.com")
                 .password("HASH")
                 .fullName("Delete User")
+                .role(UserRole.USER.name())
                 .createdAt(Instant.now())
                 .build();
 
@@ -119,6 +124,7 @@ class UserRepositoryTest {
                 .email("unique@example.com")
                 .password("HASH1")
                 .fullName("User 1")
+                .role(UserRole.USER.name())
                 .createdAt(Instant.now())
                 .build();
 
@@ -130,6 +136,7 @@ class UserRepositoryTest {
                 .email("unique@example.com")
                 .password("HASH2")
                 .fullName("User 2")
+                .role(UserRole.USER.name())
                 .createdAt(Instant.now())
                 .build();
 
