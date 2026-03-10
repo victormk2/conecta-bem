@@ -2,6 +2,7 @@ package br.com.conectabem.service;
 
 import br.com.conectabem.dto.user.RegisterRequest;
 import br.com.conectabem.model.User;
+import br.com.conectabem.model.UserRole;
 import br.com.conectabem.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,7 @@ class UserServiceUnitTest {
         assertEquals("u@e.com", created.getEmail());
         assertEquals("HASH", created.getPassword());
         assertEquals("User", created.getFullName());
+        assertEquals(UserRole.USER.name(), created.getRole());
         assertNotNull(created.getCreatedAt());
 
         verify(userRepository).save(any(User.class));
@@ -58,12 +60,34 @@ class UserServiceUnitTest {
     @Test
     void authenticateReturnsUserWhenPasswordMatches() {
         String raw = "rawpwd";
-        User u = User.builder().id(UUID.randomUUID()).email("a@b.com").password("HASH").build();
+        User u = User.builder()
+                .id(UUID.randomUUID())
+                .email("a@b.com")
+                .password("HASH")
+                .role(UserRole.USER.name())
+                .build();
         when(userRepository.findByEmail("a@b.com")).thenReturn(Optional.of(u));
         when(passwordEncoder.matches(raw, "HASH")).thenReturn(true);
 
         Optional<User> auth = userService.authenticate("a@b.com", raw);
         assertTrue(auth.isPresent());
         assertEquals(u.getId(), auth.get().getId());
+    }
+
+    @Test
+    void findByEmailAndFindByIdDelegateToRepository() {
+        UUID id = UUID.randomUUID();
+        User user = User.builder()
+                .id(id)
+                .email("find@example.com")
+                .password("HASH")
+                .role(UserRole.USER.name())
+                .build();
+
+        when(userRepository.findByEmail("find@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findById(id)).thenReturn(Optional.of(user));
+
+        assertTrue(userService.findByEmail("find@example.com").isPresent());
+        assertTrue(userService.findById(id).isPresent());
     }
 }

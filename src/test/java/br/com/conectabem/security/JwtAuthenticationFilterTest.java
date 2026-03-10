@@ -70,4 +70,14 @@ class JwtAuthenticationFilterTest {
         assertNull(SecurityContextHolder.getContext().getAuthentication());
         verify(filterChain).doFilter(request, response);
     }
+
+    @Test
+    void doFilterInternal_keepsContextEmpty_whenHeaderMissing() throws Exception {
+        when(request.getHeader("Authorization")).thenReturn(null);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(filterChain).doFilter(request, response);
+    }
 }

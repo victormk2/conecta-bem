@@ -13,27 +13,25 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "users")
+@Table(name = "event_announcements")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class EventAnnouncement {
 
     @Id
     private UUID id;
 
-    @Column(nullable = false, unique = true)
-    private String email;
-
-    // stored password hash
     @Column(nullable = false)
-    private String password;
-
-    private String fullName;
+    private UUID eventId;
 
     @Column(nullable = false)
-    private String role;
+    private UUID authorId;
 
+    @Column(nullable = false, length = 1000)
+    private String message;
+
+    @Column(nullable = false)
     private Instant createdAt;
 }
