@@ -122,7 +122,7 @@ public class EventServiceImpl implements EventService {
     @Override
     public boolean delete(UUID eventId, UUID requesterId) {
         Optional<Event> event = eventRepository.findById(eventId)
-                .filter(found -> found.getOwnerId().equals(requesterId) || isAdmin(requesterId));
+                .filter(found -> found.getOwnerId().equals(requesterId) );
         event.ifPresent(eventRepository::delete);
         return event.isPresent();
     }
@@ -211,13 +211,7 @@ public class EventServiceImpl implements EventService {
         return registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId).isPresent();
     }
 
-    private boolean isAdmin(UUID requesterId) {
-        return userRepository.findById(requesterId)
-                .map(User::getRole)
-                .map(UserRole::valueOf)
-                .filter(role -> role == UserRole.ADMIN)
-                .isPresent();
-    }
+
 
     private void validateDateRange(Instant startsAt, Instant endsAt) {
         if (endsAt != null && startsAt.isAfter(endsAt)) {
