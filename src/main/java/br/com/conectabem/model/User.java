@@ -1,39 +1,39 @@
 package br.com.conectabem.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import jakarta.persistence.*;
 import lombok.Data;
-import lombok.NoArgsConstructor;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
 import java.util.UUID;
 
+@Data
 @Entity
 @Table(name = "users")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class User {
 
     @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(name = "id", updatable = false, nullable = false, columnDefinition = "uuid")
     private UUID id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, length = 50, unique = true)
+    private String username;
+
+    @Column(nullable = false, length = 100)
     private String email;
 
-    // stored password hash
-    @Column(nullable = false)
-    private String password;
-
+    @Column(nullable = false, length = 100)
     private String fullName;
 
-    @Column(nullable = false)
-    private String role;
+    private String password;
 
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+    }
 }

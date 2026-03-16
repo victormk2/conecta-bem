@@ -1,22 +1,9 @@
 package br.com.conectabem.dto.user;
 
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
-import lombok.Data;
-
-@Data
-public class RegisterRequest {
-
-    @NotBlank
-    @Email
-    private String email;
-
-    @NotBlank
-    @Size(min = 8)
-    private String password;
-
-    @NotBlank
-    private String fullName;
+public record RegisterRequest(
+        String username,
+        String password,
+        String email,
+        String fullName
+) {
 }
-

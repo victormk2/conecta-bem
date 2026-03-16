@@ -126,8 +126,13 @@
 		    <version>3.27.7</version>
 		    <scope>test</scope>
 		</dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
 
-		<!-- BCrypt is provided by spring-security, but ensure password encoder support -->
+        <!-- BCrypt is provided by spring-security, but ensure password encoder support -->
 
 	</dependencies>
 
