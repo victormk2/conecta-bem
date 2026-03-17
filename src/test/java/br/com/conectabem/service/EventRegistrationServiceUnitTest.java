@@ -1,6 +1,5 @@
 package br.com.conectabem.service;
 
-import br.com.conectabem.dto.event.EventRegistrationDTO;
 import br.com.conectabem.dto.event.JustifyAbsenceRequest;
 import br.com.conectabem.dto.event.UpdateParticipationStatusRequest;
 import br.com.conectabem.model.Event;
@@ -18,6 +17,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -25,6 +26,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,17 +47,22 @@ class EventRegistrationServiceUnitTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     private EventRegistrationServiceImpl registrationService;
 
     @BeforeEach
     void setup() {
-        registrationService = new EventRegistrationServiceImpl(eventRepository, registrationRepository, userRepository);
+        registrationService = new EventRegistrationServiceImpl(eventRepository, registrationRepository, userRepository, currentUserService);
     }
 
     @Test
     void registerCreatesNewParticipationWhenEventHasCapacity() {
         UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(UUID.randomUUID())
@@ -66,14 +73,13 @@ class EventRegistrationServiceUnitTest {
                 .capacity(2)
                 .createdAt(Instant.now())
                 .build();
-        User volunteer = User.builder()
-                .id(volunteerId)
-                .email("vol@example.com")
-                .fullName("Volunteer")
-                .password("HASH")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
+
+        User volunteer = new User();
+        volunteer.setId(volunteerId);
+        volunteer.setUsername("vol");
+        volunteer.setEmail("vol@example.com");
+        volunteer.setFullName("Volunteer");
+        volunteer.setRole(UserRole.USER);
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
         when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.empty());
@@ -81,16 +87,85 @@ class EventRegistrationServiceUnitTest {
         when(registrationRepository.save(any(EventRegistration.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.findById(volunteerId)).thenReturn(Optional.of(volunteer));
 
-        EventRegistrationDTO created = registrationService.register(eventId, volunteerId);
+        var created = registrationService.register(eventId);
 
+        assertNotNull(created.getId());
         assertEquals(ParticipationStatus.REGISTERED, created.getStatus());
         assertEquals("Volunteer", created.getVolunteerName());
+    }
+
+    @Test
+    void registerRejectsWhenEventIsFull() {
+        UUID eventId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(3600))
+                .capacity(1)
+                .createdAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.empty());
+        when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(1L);
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.register(eventId));
+    }
+
+    @Test
+    void registerRejectsWhenOwnerTriesToRegister() {
+        UUID eventId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(ownerId)
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(3600))
+                .createdAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.register(eventId));
+    }
+
+    @Test
+    void registerRejectsWhenEventHasAlreadyStarted() {
+        UUID eventId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().minusSeconds(5))
+                .createdAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.register(eventId));
     }
 
     @Test
     void registerRejectsWhenVolunteerAlreadyRegistered() {
         UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(UUID.randomUUID())
@@ -111,58 +186,234 @@ class EventRegistrationServiceUnitTest {
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
         when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(existing));
 
-        assertThrows(IllegalArgumentException.class, () -> registrationService.register(eventId, volunteerId));
+        assertThrows(IllegalArgumentException.class, () -> registrationService.register(eventId));
     }
 
     @Test
     void registerRestoresCanceledRegistration() {
         UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(UUID.randomUUID())
-                .title("Evento")
+                .title("A")
                 .location("Sao Paulo")
-                .activityType("Limpeza")
+                .activityType("Mutirao")
                 .startsAt(Instant.now().plusSeconds(3600))
-                .capacity(5)
+                .capacity(10)
                 .createdAt(Instant.now())
                 .build();
-        EventRegistration existing = EventRegistration.builder()
+
+        EventRegistration canceled = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(eventId)
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.CANCELED)
+                .registeredAt(Instant.now().minusSeconds(7200))
+                .statusUpdatedAt(Instant.now().minusSeconds(7200))
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(canceled));
+        when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(0L);
+        when(registrationRepository.save(any(EventRegistration.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var restored = registrationService.register(eventId);
+
+        assertEquals(ParticipationStatus.REGISTERED, restored.getStatus());
+        verify(registrationRepository).save(any(EventRegistration.class));
+    }
+
+    @Test
+    void registerDoesNotCheckCapacityWhenUnlimited() {
+        UUID eventId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(3600))
+                .capacity(null)
+                .createdAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.empty());
+        when(registrationRepository.save(any(EventRegistration.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        registrationService.register(eventId);
+
+        verify(registrationRepository, never()).countByEventIdAndStatusIn(eq(eventId), any(Set.class));
+    }
+
+    @Test
+    void cancelRegistrationMarksCanceledWhenAllowed() {
+        UUID eventId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(24 * 3600))
+                .createdAt(Instant.now())
+                .build();
+
+        EventRegistration registration = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(eventId)
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.REGISTERED)
+                .registeredAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
+        when(registrationRepository.save(any(EventRegistration.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean canceled = registrationService.cancelRegistration(eventId);
+
+        assertTrue(canceled);
+        assertEquals(ParticipationStatus.CANCELED, registration.getStatus());
+        verify(registrationRepository).save(any(EventRegistration.class));
+    }
+
+    @Test
+    void cancelRegistrationThrowsWhenRegistrationDoesNotExist() {
+        UUID eventId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(24 * 3600))
+                .createdAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.empty());
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.cancelRegistration(eventId));
+    }
+
+    @Test
+    void cancelRegistrationRejectsWhenStatusIsPresent() {
+        UUID eventId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(24 * 3600))
+                .createdAt(Instant.now())
+                .build();
+
+        EventRegistration registration = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(eventId)
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.PRESENT)
+                .registeredAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.cancelRegistration(eventId));
+    }
+
+    @Test
+    void cancelRegistrationReturnsFalseWhenAlreadyCanceled() {
+        UUID eventId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(24 * 3600))
+                .createdAt(Instant.now())
+                .build();
+
+        EventRegistration registration = EventRegistration.builder()
                 .id(UUID.randomUUID())
                 .eventId(eventId)
                 .volunteerId(volunteerId)
                 .status(ParticipationStatus.CANCELED)
                 .registeredAt(Instant.now())
-                .justification("old")
-                .build();
-        User volunteer = User.builder()
-                .id(volunteerId)
-                .email("vol@example.com")
-                .fullName("Volunteer")
-                .password("HASH")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
                 .build();
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
-        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(existing));
-        when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(1L);
-        when(registrationRepository.save(any(EventRegistration.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(userRepository.findById(volunteerId)).thenReturn(Optional.of(volunteer));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
 
-        EventRegistrationDTO restored = registrationService.register(eventId, volunteerId);
+        boolean canceled = registrationService.cancelRegistration(eventId);
 
-        assertEquals(ParticipationStatus.REGISTERED, restored.getStatus());
+        assertFalse(canceled);
+        verify(registrationRepository, never()).save(any(EventRegistration.class));
     }
 
     @Test
-    void cancelRegistrationRejectsSameDayCancellation() {
+    void cancelRegistrationRejectsOnTheSameDayOfTheEvent() {
         UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        ZoneId zone = ZoneId.systemDefault();
+        Instant startsAt = LocalDate.now(zone).atStartOfDay(zone).plusHours(12).toInstant();
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(startsAt)
+                .createdAt(Instant.now())
+                .build();
+
+        EventRegistration registration = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(eventId)
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.REGISTERED)
+                .registeredAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.cancelRegistration(eventId));
+    }
+
+    @Test
+    void updateParticipationStatusRejectsBeforeEventStarts() {
+        UUID eventId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(ownerId)
                 .title("A")
                 .location("Sao Paulo")
                 .activityType("Mutirao")
@@ -176,48 +427,22 @@ class EventRegistrationServiceUnitTest {
                 .status(ParticipationStatus.REGISTERED)
                 .registeredAt(Instant.now())
                 .build();
+        UpdateParticipationStatusRequest request = new UpdateParticipationStatusRequest();
+        request.setStatus(ParticipationStatus.PRESENT);
 
-        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
         when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
 
-        assertThrows(IllegalArgumentException.class, () -> registrationService.cancelRegistration(eventId, volunteerId));
-        verify(registrationRepository, never()).save(any(EventRegistration.class));
+        assertThrows(IllegalArgumentException.class, () -> registrationService.updateParticipationStatus(eventId, volunteerId, request));
     }
 
     @Test
-    void cancelRegistrationReturnsFalseWhenAlreadyCanceled() {
+    void updateParticipationStatusRejectsInvalidStatus() {
         UUID eventId = UUID.randomUUID();
-        UUID volunteerId = UUID.randomUUID();
-        Event event = Event.builder()
-                .id(eventId)
-                .ownerId(UUID.randomUUID())
-                .title("Evento")
-                .location("Sao Paulo")
-                .activityType("Limpeza")
-                .startsAt(Instant.now().plusSeconds(86400 * 2))
-                .createdAt(Instant.now())
-                .build();
-        EventRegistration registration = EventRegistration.builder()
-                .id(UUID.randomUUID())
-                .eventId(eventId)
-                .volunteerId(volunteerId)
-                .status(ParticipationStatus.CANCELED)
-                .registeredAt(Instant.now())
-                .build();
-
-        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
-        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
-
-        boolean canceled = registrationService.cancelRegistration(eventId, volunteerId);
-
-        assertFalse(canceled);
-    }
-
-    @Test
-    void updateParticipationStatusAcceptsAbsentAfterEventStart() {
         UUID ownerId = UUID.randomUUID();
-        UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(ownerId)
@@ -234,13 +459,37 @@ class EventRegistrationServiceUnitTest {
                 .status(ParticipationStatus.REGISTERED)
                 .registeredAt(Instant.now())
                 .build();
-        User volunteer = User.builder()
-                .id(volunteerId)
-                .email("vol@example.com")
-                .fullName("Volunteer")
-                .password("HASH")
-                .role(UserRole.USER.name())
+        UpdateParticipationStatusRequest request = new UpdateParticipationStatusRequest();
+        request.setStatus(ParticipationStatus.JUSTIFIED);
+
+        when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.updateParticipationStatus(eventId, volunteerId, request));
+    }
+
+    @Test
+    void updateParticipationStatusUpdatesToAbsent() {
+        UUID eventId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(ownerId)
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().minusSeconds(3600))
                 .createdAt(Instant.now())
+                .build();
+        EventRegistration registration = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(eventId)
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.REGISTERED)
+                .registeredAt(Instant.now().minusSeconds(7200))
                 .build();
         UpdateParticipationStatusRequest request = new UpdateParticipationStatusRequest();
         request.setStatus(ParticipationStatus.ABSENT);
@@ -248,17 +497,43 @@ class EventRegistrationServiceUnitTest {
         when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
         when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
         when(registrationRepository.save(any(EventRegistration.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(userRepository.findById(volunteerId)).thenReturn(Optional.of(volunteer));
 
-        EventRegistrationDTO updated = registrationService.updateParticipationStatus(eventId, volunteerId, request, ownerId);
+        var updated = registrationService.updateParticipationStatus(eventId, volunteerId, request);
 
         assertEquals(ParticipationStatus.ABSENT, updated.getStatus());
+    }
+
+    @Test
+    void updateParticipationStatusThrowsWhenRegistrationDoesNotExist() {
+        UUID eventId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(ownerId)
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().minusSeconds(3600))
+                .createdAt(Instant.now())
+                .build();
+        UpdateParticipationStatusRequest request = new UpdateParticipationStatusRequest();
+        request.setStatus(ParticipationStatus.PRESENT);
+
+        when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.empty());
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.updateParticipationStatus(eventId, volunteerId, request));
     }
 
     @Test
     void justifyAbsencePromotesAbsentRegistrationToJustified() {
         UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(UUID.randomUUID())
@@ -275,23 +550,14 @@ class EventRegistrationServiceUnitTest {
                 .status(ParticipationStatus.ABSENT)
                 .registeredAt(Instant.now().minusSeconds(7200))
                 .build();
-        User volunteer = User.builder()
-                .id(volunteerId)
-                .email("vol@example.com")
-                .fullName("Volunteer")
-                .password("HASH")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
         JustifyAbsenceRequest request = new JustifyAbsenceRequest();
-        request.setJustification("Imprevisto familiar");
+        request.setJustification("  Imprevisto familiar  ");
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
         when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
         when(registrationRepository.save(any(EventRegistration.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(userRepository.findById(volunteerId)).thenReturn(Optional.of(volunteer));
 
-        EventRegistrationDTO updated = registrationService.justifyAbsence(eventId, volunteerId, request);
+        var updated = registrationService.justifyAbsence(eventId, request);
 
         assertEquals(ParticipationStatus.JUSTIFIED, updated.getStatus());
         assertEquals("Imprevisto familiar", updated.getJustification());
@@ -301,6 +567,8 @@ class EventRegistrationServiceUnitTest {
     void justifyAbsenceRejectsWhenRegistrationIsNotAbsent() {
         UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(UUID.randomUUID())
@@ -310,6 +578,7 @@ class EventRegistrationServiceUnitTest {
                 .startsAt(Instant.now().minusSeconds(3600))
                 .createdAt(Instant.now())
                 .build();
+
         EventRegistration registration = EventRegistration.builder()
                 .id(UUID.randomUUID())
                 .eventId(eventId)
@@ -317,20 +586,99 @@ class EventRegistrationServiceUnitTest {
                 .status(ParticipationStatus.PRESENT)
                 .registeredAt(Instant.now())
                 .build();
-        JustifyAbsenceRequest request = new JustifyAbsenceRequest();
-        request.setJustification("Motivo");
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
         when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
 
-        assertThrows(IllegalArgumentException.class, () -> registrationService.justifyAbsence(eventId, volunteerId, request));
+        JustifyAbsenceRequest request = new JustifyAbsenceRequest();
+        request.setJustification("Motivo");
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.justifyAbsence(eventId, request));
     }
 
     @Test
-    void listVolunteerHistoryCanFilterFutureEvents() {
+    void justifyAbsenceRejectsBeforeEventStarts() {
+        UUID eventId = UUID.randomUUID();
         UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(3600))
+                .createdAt(Instant.now())
+                .build();
+
+        EventRegistration registration = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(eventId)
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.ABSENT)
+                .registeredAt(Instant.now())
+                .build();
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
+
+        JustifyAbsenceRequest request = new JustifyAbsenceRequest();
+        request.setJustification("Motivo");
+
+        assertThrows(IllegalArgumentException.class, () -> registrationService.justifyAbsence(eventId, request));
+    }
+
+    @Test
+    void listParticipantsReturnsRegistrationsForOwnedEvent() {
+        UUID eventId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(ownerId)
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now().plusSeconds(3600))
+                .createdAt(Instant.now())
+                .build();
+
+        UUID volunteerId = UUID.randomUUID();
+        EventRegistration registration = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(eventId)
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.REGISTERED)
+                .registeredAt(Instant.now())
+                .build();
+
+        User volunteer = new User();
+        volunteer.setId(volunteerId);
+        volunteer.setUsername("vol");
+        volunteer.setEmail("vol@example.com");
+        volunteer.setFullName("Volunteer");
+        volunteer.setRole(UserRole.USER);
+
+        when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
+        when(registrationRepository.findAllByEventIdOrderByRegisteredAtAsc(eventId)).thenReturn(List.of(registration));
+        when(userRepository.findById(volunteerId)).thenReturn(Optional.of(volunteer));
+
+        var participants = registrationService.listParticipants(eventId);
+
+        assertEquals(1, participants.size());
+        assertEquals("Volunteer", participants.getFirst().getVolunteerName());
+    }
+
+    @Test
+    void myRegistrationsCanFilterFutureEvents() {
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
         UUID futureEventId = UUID.randomUUID();
         UUID pastEventId = UUID.randomUUID();
+
         EventRegistration futureRegistration = EventRegistration.builder()
                 .id(UUID.randomUUID())
                 .eventId(futureEventId)
@@ -345,21 +693,14 @@ class EventRegistrationServiceUnitTest {
                 .status(ParticipationStatus.PRESENT)
                 .registeredAt(Instant.now().minusSeconds(100))
                 .build();
-        User volunteer = User.builder()
-                .id(volunteerId)
-                .email("vol@example.com")
-                .fullName("Volunteer")
-                .password("HASH")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
 
         when(registrationRepository.findAllByVolunteerIdOrderByRegisteredAtDesc(volunteerId))
                 .thenReturn(List.of(futureRegistration, pastRegistration));
+
         when(eventRepository.findById(futureEventId)).thenReturn(Optional.of(Event.builder()
                 .id(futureEventId)
                 .ownerId(UUID.randomUUID())
-                .title("Future")
+                .title("F")
                 .location("Sao Paulo")
                 .activityType("Mutirao")
                 .startsAt(Instant.now().plusSeconds(3600))
@@ -368,18 +709,59 @@ class EventRegistrationServiceUnitTest {
         when(eventRepository.findById(pastEventId)).thenReturn(Optional.of(Event.builder()
                 .id(pastEventId)
                 .ownerId(UUID.randomUUID())
-                .title("Past")
+                .title("P")
                 .location("Sao Paulo")
                 .activityType("Mutirao")
                 .startsAt(Instant.now().minusSeconds(3600))
                 .createdAt(Instant.now())
                 .build()));
+
+        User volunteer = new User();
+        volunteer.setId(volunteerId);
+        volunteer.setUsername("vol");
+        volunteer.setEmail("vol@example.com");
+        volunteer.setFullName("Volunteer");
+        volunteer.setRole(UserRole.USER);
         when(userRepository.findById(volunteerId)).thenReturn(Optional.of(volunteer));
 
-        List<EventRegistrationDTO> history = registrationService.listVolunteerHistory(volunteerId, true);
+        var futureOnly = registrationService.myRegistrations(true);
 
-        assertEquals(1, history.size());
-        assertEquals(futureEventId, history.getFirst().getEventId());
-        assertTrue(history.getFirst().getVolunteerEmail().contains("@"));
+        assertEquals(1, futureOnly.size());
+        assertEquals(futureEventId, futureOnly.getFirst().getEventId());
+    }
+
+    @Test
+    void myRegistrationsReturnsAllWhenFutureOnlyIsFalse() {
+        UUID volunteerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(volunteerId);
+
+        EventRegistration r1 = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(UUID.randomUUID())
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.REGISTERED)
+                .registeredAt(Instant.now())
+                .build();
+        EventRegistration r2 = EventRegistration.builder()
+                .id(UUID.randomUUID())
+                .eventId(UUID.randomUUID())
+                .volunteerId(volunteerId)
+                .status(ParticipationStatus.CANCELED)
+                .registeredAt(Instant.now())
+                .build();
+
+        when(registrationRepository.findAllByVolunteerIdOrderByRegisteredAtDesc(volunteerId)).thenReturn(List.of(r1, r2));
+
+        User volunteer = new User();
+        volunteer.setId(volunteerId);
+        volunteer.setUsername("vol");
+        volunteer.setEmail("vol@example.com");
+        volunteer.setFullName("Volunteer");
+        volunteer.setRole(UserRole.USER);
+        when(userRepository.findById(volunteerId)).thenReturn(Optional.of(volunteer));
+
+        var all = registrationService.myRegistrations(false);
+
+        assertEquals(2, all.size());
     }
 }

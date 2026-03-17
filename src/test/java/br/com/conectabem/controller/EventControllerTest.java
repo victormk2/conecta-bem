@@ -1,8 +1,6 @@
 package br.com.conectabem.controller;
 
-import br.com.conectabem.dto.event.CreateAnnouncementRequest;
 import br.com.conectabem.dto.event.CreateEventRequest;
-import br.com.conectabem.dto.event.EventAnnouncementDTO;
 import br.com.conectabem.dto.event.EventDTO;
 import br.com.conectabem.dto.event.EventReportDTO;
 import br.com.conectabem.dto.event.UpdateEventRequest;
@@ -17,8 +15,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -29,8 +25,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,14 +35,9 @@ class EventControllerTest {
 
     private EventController controller;
 
-    private UUID userId;
-    private Authentication authentication;
-
     @BeforeEach
     void setup() {
         controller = new EventController(eventService);
-        userId = UUID.randomUUID();
-        authentication = new UsernamePasswordAuthenticationToken(userId, null);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setServerName("localhost");
         request.setServerPort(8080);
@@ -71,10 +60,10 @@ class EventControllerTest {
         request.setStartsAt(Instant.parse("2026-03-15T10:00:00Z"));
 
         Event created = sampleEvent();
-        when(eventService.create(request, userId)).thenReturn(created);
+        when(eventService.create(request)).thenReturn(created);
         when(eventService.getAvailableSpots(created.getId())).thenReturn(10L);
 
-        ResponseEntity<EventDTO> response = controller.create(request, authentication);
+        ResponseEntity<EventDTO> response = controller.create(request);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertNotNull(response.getHeaders().getLocation());
@@ -85,10 +74,10 @@ class EventControllerTest {
     @Test
     void listMineReturnsOwnedEvents() {
         Event event = sampleEvent();
-        when(eventService.findAllByOwner(userId)).thenReturn(List.of(event));
+        when(eventService.listMine()).thenReturn(List.of(event));
         when(eventService.getAvailableSpots(event.getId())).thenReturn(4L);
 
-        ResponseEntity<List<EventDTO>> response = controller.listMine(authentication);
+        ResponseEntity<List<EventDTO>> response = controller.listMine();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(1, response.getBody().size());
@@ -102,7 +91,7 @@ class EventControllerTest {
         when(eventService.getAvailableSpots(event.getId())).thenReturn(3L);
 
         ResponseEntity<List<EventDTO>> response =
-                controller.listAvailable("Sao Paulo", "Limpeza", "2026-03-10", authentication);
+                controller.listAvailable("Sao Paulo", "Limpeza", "2026-03-10");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(event.getId(), response.getBody().getFirst().getId());
@@ -111,9 +100,9 @@ class EventControllerTest {
     @Test
     void getByIdReturnsNotFoundWhenServiceDoesNotFindEvent() {
         UUID eventId = UUID.randomUUID();
-        when(eventService.findAccessibleById(eventId, userId)).thenReturn(Optional.empty());
+        when(eventService.findAccessibleById(eventId)).thenReturn(Optional.empty());
 
-        ResponseEntity<EventDTO> response = controller.getById(eventId, authentication);
+        ResponseEntity<EventDTO> response = controller.getById(eventId);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
@@ -127,10 +116,10 @@ class EventControllerTest {
         request.setActivityType("Doacao");
         request.setStartsAt(Instant.parse("2026-03-20T10:00:00Z"));
         Event event = sampleEvent();
-        when(eventService.update(eventId, request, userId)).thenReturn(Optional.of(event));
+        when(eventService.update(eventId, request)).thenReturn(Optional.of(event));
         when(eventService.getAvailableSpots(event.getId())).thenReturn(6L);
 
-        ResponseEntity<EventDTO> response = controller.update(eventId, request, authentication);
+        ResponseEntity<EventDTO> response = controller.update(eventId, request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(6L, response.getBody().getAvailableSpots());
@@ -139,40 +128,11 @@ class EventControllerTest {
     @Test
     void deleteReturnsNoContentWhenDeleted() {
         UUID eventId = UUID.randomUUID();
-        when(eventService.delete(eventId, userId)).thenReturn(true);
+        when(eventService.delete(eventId)).thenReturn(true);
 
-        ResponseEntity<Void> response = controller.delete(eventId, authentication);
+        ResponseEntity<Void> response = controller.delete(eventId);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-    }
-
-    @Test
-    void createAnnouncementReturnsCreatedMessage() {
-        UUID eventId = UUID.randomUUID();
-        CreateAnnouncementRequest request = new CreateAnnouncementRequest();
-        request.setMessage("Aviso");
-        EventAnnouncementDTO dto = new EventAnnouncementDTO();
-        dto.setId(UUID.randomUUID());
-        dto.setEventId(eventId);
-        when(eventService.createAnnouncement(eventId, request, userId)).thenReturn(dto);
-
-        ResponseEntity<EventAnnouncementDTO> response = controller.createAnnouncement(eventId, request, authentication);
-
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertTrue(response.getHeaders().getLocation().toString().contains(dto.getId().toString()));
-    }
-
-    @Test
-    void listAnnouncementsReturnsMessages() {
-        UUID eventId = UUID.randomUUID();
-        EventAnnouncementDTO dto = new EventAnnouncementDTO();
-        dto.setEventId(eventId);
-        when(eventService.listAnnouncements(eventId, userId)).thenReturn(List.of(dto));
-
-        ResponseEntity<List<EventAnnouncementDTO>> response = controller.listAnnouncements(eventId, authentication);
-
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(1, response.getBody().size());
     }
 
     @Test
@@ -180,18 +140,12 @@ class EventControllerTest {
         UUID eventId = UUID.randomUUID();
         EventReportDTO report = new EventReportDTO();
         report.setTotalRegistrations(5);
-        when(eventService.buildReport(eventId, userId)).thenReturn(report);
+        when(eventService.buildReport(eventId)).thenReturn(report);
 
-        ResponseEntity<EventReportDTO> response = controller.report(eventId, authentication);
+        ResponseEntity<EventReportDTO> response = controller.report(eventId);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(5, response.getBody().getTotalRegistrations());
-    }
-
-    @Test
-    void methodsThatRequireAuthThrowWhenAuthenticationMissing() {
-        assertThrows(IllegalArgumentException.class, () -> controller.listMine(null));
-        assertThrows(IllegalArgumentException.class, () -> controller.listAvailable(null, null, null, null));
     }
 
     private Event sampleEvent() {
@@ -204,7 +158,7 @@ class EventControllerTest {
                 .startsAt(Instant.parse("2026-03-15T10:00:00Z"))
                 .endsAt(Instant.parse("2026-03-15T12:00:00Z"))
                 .capacity(10)
-                .ownerId(userId)
+                .ownerId(UUID.randomUUID())
                 .createdAt(Instant.parse("2026-03-09T12:00:00Z"))
                 .updatedAt(Instant.parse("2026-03-09T13:00:00Z"))
                 .build();

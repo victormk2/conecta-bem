@@ -1,8 +1,6 @@
 package br.com.conectabem.controller;
 
-import br.com.conectabem.dto.event.CreateAnnouncementRequest;
 import br.com.conectabem.dto.event.CreateEventRequest;
-import br.com.conectabem.dto.event.EventAnnouncementDTO;
 import br.com.conectabem.dto.event.EventDTO;
 import br.com.conectabem.dto.event.EventReportDTO;
 import br.com.conectabem.dto.event.UpdateEventRequest;
@@ -10,7 +8,6 @@ import br.com.conectabem.model.Event;
 import br.com.conectabem.service.EventService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,10 +34,8 @@ public class EventController {
     }
 
     @PostMapping
-    public ResponseEntity<EventDTO> create(@Valid @RequestBody CreateEventRequest request,
-                                           Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        Event created = service.create(request, userId);
+    public ResponseEntity<EventDTO> create(@Valid @RequestBody CreateEventRequest request) {
+        Event created = service.create(request);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(created.getId())
@@ -49,18 +44,15 @@ public class EventController {
     }
 
     @GetMapping("/mine")
-    public ResponseEntity<List<EventDTO>> listMine(Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        List<EventDTO> events = service.findAllByOwner(userId).stream().map(this::toDTO).toList();
+    public ResponseEntity<List<EventDTO>> listMine() {
+        List<EventDTO> events = service.listMine().stream().map(this::toDTO).toList();
         return ResponseEntity.ok(events);
     }
 
     @GetMapping
     public ResponseEntity<List<EventDTO>> listAvailable(@RequestParam(required = false) String location,
                                                         @RequestParam(required = false) String activityType,
-                                                        @RequestParam(required = false) String fromDate,
-                                                        Authentication authentication) {
-        requireUserId(authentication);
+                                                        @RequestParam(required = false) String fromDate) {
         List<EventDTO> events = service.findAvailable(location, activityType, fromDate)
                 .stream()
                 .map(this::toDTO)
@@ -69,62 +61,30 @@ public class EventController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<EventDTO> getById(@PathVariable UUID id, Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return service.findAccessibleById(id, userId)
+    public ResponseEntity<EventDTO> getById(@PathVariable UUID id) {
+        return service.findAccessibleById(id)
                 .map(event -> ResponseEntity.ok(toDTO(event)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<EventDTO> update(@PathVariable UUID id,
-                                           @Valid @RequestBody UpdateEventRequest request,
-                                           Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return service.update(id, request, userId)
+                                           @Valid @RequestBody UpdateEventRequest request) {
+        return service.update(id, request)
                 .map(event -> ResponseEntity.ok(toDTO(event)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id, Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return service.delete(id, userId)
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        return service.delete(id)
                 ? ResponseEntity.noContent().build()
                 : ResponseEntity.notFound().build();
     }
 
-    @PostMapping("/{id}/announcements")
-    public ResponseEntity<EventAnnouncementDTO> createAnnouncement(@PathVariable UUID id,
-                                                                   @Valid @RequestBody CreateAnnouncementRequest request,
-                                                                   Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        EventAnnouncementDTO announcement = service.createAnnouncement(id, request, userId);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{announcementId}")
-                .buildAndExpand(announcement.getId())
-                .toUri();
-        return ResponseEntity.created(location).body(announcement);
-    }
-
-    @GetMapping("/{id}/announcements")
-    public ResponseEntity<List<EventAnnouncementDTO>> listAnnouncements(@PathVariable UUID id,
-                                                                        Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return ResponseEntity.ok(service.listAnnouncements(id, userId));
-    }
-
     @GetMapping("/{id}/report")
-    public ResponseEntity<EventReportDTO> report(@PathVariable UUID id, Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return ResponseEntity.ok(service.buildReport(id, userId));
-    }
-
-    private UUID requireUserId(Authentication authentication) {
-        if (authentication == null || authentication.getPrincipal() == null) {
-            throw new IllegalArgumentException("authentication required");
-        }
-        return (UUID) authentication.getPrincipal();
+    public ResponseEntity<EventReportDTO> report(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.buildReport(id));
     }
 
     private EventDTO toDTO(Event event) {

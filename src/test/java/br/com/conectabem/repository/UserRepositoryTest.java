@@ -9,7 +9,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,21 +30,21 @@ class UserRepositoryTest {
 
     @Test
     void saveAndFindByEmail() {
-        User u = User.builder()
-                .id(UUID.randomUUID())
-                .email("repo@example.com")
-                .password("HASH")
-                .fullName("Repo User")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
+        User u = new User();
+        u.setUsername("repo");
+        u.setEmail("repo@example.com");
+        u.setPassword("HASH");
+        u.setFullName("Repo User");
+        u.setRole(UserRole.USER);
 
-        userRepository.save(u);
+        User saved = userRepository.save(u);
+        assertThat(saved.getId()).isNotNull();
 
         Optional<User> found = userRepository.findByEmail("repo@example.com");
         assertThat(found).isPresent();
-        assertThat(found.get().getEmail()).isEqualTo("repo@example.com");
+        assertThat(found.get().getUsername()).isEqualTo("repo");
         assertThat(found.get().getFullName()).isEqualTo("Repo User");
+        assertThat(found.get().getRole()).isEqualTo(UserRole.USER);
     }
 
     @Test
@@ -56,17 +55,14 @@ class UserRepositoryTest {
 
     @Test
     void findById() {
-        UUID id = UUID.randomUUID();
-        User u = User.builder()
-                .id(id)
-                .email("findbyid@example.com")
-                .password("HASH")
-                .fullName("Find By ID")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
+        User u = new User();
+        u.setUsername("findbyid");
+        u.setEmail("findbyid@example.com");
+        u.setPassword("HASH");
+        u.setFullName("Find By ID");
+        u.setRole(UserRole.USER);
 
-        userRepository.save(u);
+        UUID id = userRepository.save(u).getId();
 
         Optional<User> found = userRepository.findById(id);
         assertThat(found).isPresent();
@@ -75,23 +71,20 @@ class UserRepositoryTest {
 
     @Test
     void updateUser() {
-        UUID id = UUID.randomUUID();
-        User u = User.builder()
-                .id(id)
-                .email("update@example.com")
-                .password("OLD_HASH")
-                .fullName("Old Name")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
+        User u = new User();
+        u.setUsername("update");
+        u.setEmail("update@example.com");
+        u.setPassword("OLD_HASH");
+        u.setFullName("Old Name");
+        u.setRole(UserRole.USER);
 
-        userRepository.save(u);
+        User saved = userRepository.save(u);
 
-        u.setPassword("NEW_HASH");
-        u.setFullName("New Name");
-        userRepository.save(u);
+        saved.setPassword("NEW_HASH");
+        saved.setFullName("New Name");
+        userRepository.save(saved);
 
-        Optional<User> found = userRepository.findById(id);
+        Optional<User> found = userRepository.findById(saved.getId());
         assertThat(found).isPresent();
         assertThat(found.get().getPassword()).isEqualTo("NEW_HASH");
         assertThat(found.get().getFullName()).isEqualTo("New Name");
@@ -99,17 +92,14 @@ class UserRepositoryTest {
 
     @Test
     void deleteUser() {
-        UUID id = UUID.randomUUID();
-        User u = User.builder()
-                .id(id)
-                .email("delete@example.com")
-                .password("HASH")
-                .fullName("Delete User")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
+        User u = new User();
+        u.setUsername("delete");
+        u.setEmail("delete@example.com");
+        u.setPassword("HASH");
+        u.setFullName("Delete User");
+        u.setRole(UserRole.USER);
 
-        userRepository.save(u);
+        UUID id = userRepository.save(u).getId();
         assertThat(userRepository.findById(id)).isPresent();
 
         userRepository.deleteById(id);
@@ -117,31 +107,24 @@ class UserRepositoryTest {
     }
 
     @Test
-    void uniqueEmailConstraint() {
-        UUID id1 = UUID.randomUUID();
-        User u1 = User.builder()
-                .id(id1)
-                .email("unique@example.com")
-                .password("HASH1")
-                .fullName("User 1")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
-
+    void uniqueUsernameConstraint() {
+        User u1 = new User();
+        u1.setUsername("unique");
+        u1.setEmail("u1@example.com");
+        u1.setPassword("HASH1");
+        u1.setFullName("User 1");
+        u1.setRole(UserRole.USER);
         userRepository.save(u1);
 
-        UUID id2 = UUID.randomUUID();
-        User u2 = User.builder()
-                .id(id2)
-                .email("unique@example.com")
-                .password("HASH2")
-                .fullName("User 2")
-                .role(UserRole.USER.name())
-                .createdAt(Instant.now())
-                .build();
+        User u2 = new User();
+        u2.setUsername("unique");
+        u2.setEmail("u2@example.com");
+        u2.setPassword("HASH2");
+        u2.setFullName("User 2");
+        u2.setRole(UserRole.USER);
 
-        // Try to save user with duplicate email - should throw exception
         assertThatThrownBy(() -> userRepository.save(u2))
                 .isInstanceOf(Exception.class);
     }
 }
+

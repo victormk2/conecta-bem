@@ -5,9 +5,7 @@ import br.com.conectabem.dto.event.JustifyAbsenceRequest;
 import br.com.conectabem.dto.event.UpdateParticipationStatusRequest;
 import br.com.conectabem.service.EventRegistrationService;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -34,9 +32,8 @@ public class EventRegistrationController {
     }
 
     @PostMapping("/{id}/registrations")
-    public ResponseEntity<EventRegistrationDTO> register(@PathVariable UUID id, Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        EventRegistrationDTO registration = service.register(id, userId);
+    public ResponseEntity<EventRegistrationDTO> register(@PathVariable UUID id) {
+        EventRegistrationDTO registration = service.register(id);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/me")
                 .build()
@@ -45,52 +42,32 @@ public class EventRegistrationController {
     }
 
     @DeleteMapping("/{id}/registrations/me")
-    public ResponseEntity<Void> cancelRegistration(@PathVariable UUID id, Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return service.cancelRegistration(id, userId)
+    public ResponseEntity<Void> cancelRegistration(@PathVariable UUID id) {
+        return service.cancelRegistration(id)
                 ? ResponseEntity.noContent().build()
                 : ResponseEntity.notFound().build();
     }
 
     @GetMapping("/{id}/participants")
-    public ResponseEntity<List<EventRegistrationDTO>> listParticipants(@PathVariable UUID id,
-                                                                       Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return ResponseEntity.ok(service.listParticipants(id, userId));
+    public ResponseEntity<List<EventRegistrationDTO>> listParticipants(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.listParticipants(id));
     }
 
     @PatchMapping("/{id}/participants/{volunteerId}/status")
     public ResponseEntity<EventRegistrationDTO> updateParticipationStatus(@PathVariable UUID id,
                                                                           @PathVariable UUID volunteerId,
-                                                                          @Valid @RequestBody UpdateParticipationStatusRequest request,
-                                                                          Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return ResponseEntity.ok(service.updateParticipationStatus(id, volunteerId, request, userId));
+                                                                          @Valid @RequestBody UpdateParticipationStatusRequest request) {
+        return ResponseEntity.ok(service.updateParticipationStatus(id, volunteerId, request));
     }
 
-    @PostMapping("/{id}/participants/{volunteerId}/justification")
+    @PostMapping("/{id}/registrations/me/justification")
     public ResponseEntity<EventRegistrationDTO> justifyAbsence(@PathVariable UUID id,
-                                                               @PathVariable UUID volunteerId,
-                                                               @Valid @RequestBody JustifyAbsenceRequest request,
-                                                               Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        if (!userId.equals(volunteerId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-        return ResponseEntity.ok(service.justifyAbsence(id, volunteerId, request));
+                                                               @Valid @RequestBody JustifyAbsenceRequest request) {
+        return ResponseEntity.ok(service.justifyAbsence(id, request));
     }
 
     @GetMapping("/registrations/me")
-    public ResponseEntity<List<EventRegistrationDTO>> myRegistrations(@RequestParam(defaultValue = "false") boolean futureOnly,
-                                                                      Authentication authentication) {
-        UUID userId = requireUserId(authentication);
-        return ResponseEntity.ok(service.listVolunteerHistory(userId, futureOnly));
-    }
-
-    private UUID requireUserId(Authentication authentication) {
-        if (authentication == null || authentication.getPrincipal() == null) {
-            throw new IllegalArgumentException("authentication required");
-        }
-        return (UUID) authentication.getPrincipal();
+    public ResponseEntity<List<EventRegistrationDTO>> myRegistrations(@RequestParam(defaultValue = "false") boolean futureOnly) {
+        return ResponseEntity.ok(service.myRegistrations(futureOnly));
     }
 }

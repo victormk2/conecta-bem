@@ -10,6 +10,7 @@ import br.com.conectabem.model.User;
 import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -20,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class EventRegistrationServiceImpl implements EventRegistrationService {
 
     private static final Set<ParticipationStatus> OCCUPYING_STATUSES = Set.of(
@@ -32,17 +34,11 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     private final EventRepository eventRepository;
     private final EventRegistrationRepository registrationRepository;
     private final UserRepository userRepository;
-
-    public EventRegistrationServiceImpl(EventRepository eventRepository,
-                                        EventRegistrationRepository registrationRepository,
-                                        UserRepository userRepository) {
-        this.eventRepository = eventRepository;
-        this.registrationRepository = registrationRepository;
-        this.userRepository = userRepository;
-    }
+    private final CurrentUserService currentUserService;
 
     @Override
-    public EventRegistrationDTO register(UUID eventId, UUID volunteerId) {
+    public EventRegistrationDTO register(UUID eventId) {
+        UUID volunteerId = currentUserService.requireUserId();
         Event event = loadEvent(eventId);
         if (event.getOwnerId().equals(volunteerId)) {
             throw new IllegalArgumentException("event owner cannot register as volunteer");
@@ -59,7 +55,8 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     }
 
     @Override
-    public boolean cancelRegistration(UUID eventId, UUID volunteerId) {
+    public boolean cancelRegistration(UUID eventId) {
+        UUID volunteerId = currentUserService.requireUserId();
         Event event = loadEvent(eventId);
         EventRegistration registration = registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)
                 .orElseThrow(() -> new IllegalArgumentException("registration not found"));
@@ -81,8 +78,8 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     }
 
     @Override
-    public List<EventRegistrationDTO> listParticipants(UUID eventId, UUID ownerId) {
-        Event event = getOwnedEvent(eventId, ownerId);
+    public List<EventRegistrationDTO> listParticipants(UUID eventId) {
+        Event event = getOwnedEvent(eventId, currentUserService.requireUserId());
         return registrationRepository.findAllByEventIdOrderByRegisteredAtAsc(event.getId())
                 .stream()
                 .map(this::toRegistrationDTO)
@@ -90,7 +87,8 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     }
 
     @Override
-    public List<EventRegistrationDTO> listVolunteerHistory(UUID volunteerId, boolean futureOnly) {
+    public List<EventRegistrationDTO> myRegistrations(boolean futureOnly) {
+        UUID volunteerId = currentUserService.requireUserId();
         Instant now = Instant.now();
         return registrationRepository.findAllByVolunteerIdOrderByRegisteredAtDesc(volunteerId)
                 .stream()
@@ -104,9 +102,8 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     @Override
     public EventRegistrationDTO updateParticipationStatus(UUID eventId,
                                                           UUID volunteerId,
-                                                          UpdateParticipationStatusRequest request,
-                                                          UUID ownerId) {
-        Event event = getOwnedEvent(eventId, ownerId);
+                                                          UpdateParticipationStatusRequest request) {
+        Event event = getOwnedEvent(eventId, currentUserService.requireUserId());
         EventRegistration registration = registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)
                 .orElseThrow(() -> new IllegalArgumentException("registration not found"));
 
@@ -125,8 +122,8 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
 
     @Override
     public EventRegistrationDTO justifyAbsence(UUID eventId,
-                                               UUID volunteerId,
                                                JustifyAbsenceRequest request) {
+        UUID volunteerId = currentUserService.requireUserId();
         Event event = loadEvent(eventId);
         EventRegistration registration = registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)
                 .orElseThrow(() -> new IllegalArgumentException("registration not found"));

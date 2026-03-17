@@ -1,15 +1,12 @@
 package br.com.conectabem.service;
 
-import br.com.conectabem.dto.event.CreateAnnouncementRequest;
 import br.com.conectabem.dto.event.CreateEventRequest;
 import br.com.conectabem.dto.event.UpdateEventRequest;
 import br.com.conectabem.model.Event;
-import br.com.conectabem.model.EventAnnouncement;
 import br.com.conectabem.model.EventRegistration;
 import br.com.conectabem.model.ParticipationStatus;
 import br.com.conectabem.model.User;
 import br.com.conectabem.model.UserRole;
-import br.com.conectabem.repository.EventAnnouncementRepository;
 import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.repository.UserRepository;
@@ -26,11 +23,13 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,21 +43,24 @@ class EventServiceUnitTest {
     private EventRegistrationRepository registrationRepository;
 
     @Mock
-    private EventAnnouncementRepository announcementRepository;
+    private UserRepository userRepository;
 
     @Mock
-    private UserRepository userRepository;
+    private CurrentUserService currentUserService;
 
     private EventServiceImpl eventService;
 
     @BeforeEach
     void setup() {
-        eventService = new EventServiceImpl(eventRepository, registrationRepository, announcementRepository, userRepository);
+        eventService = new EventServiceImpl(eventRepository, registrationRepository, userRepository, currentUserService);
     }
 
     @Test
-    void createSavesEventWithOwnerAndActivityType() {
+    void createSavesEventWithOwnerFromCurrentUser() {
         UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+        when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
         CreateEventRequest request = new CreateEventRequest();
         request.setTitle("Community Meetup");
         request.setDescription("Tech and jobs");
@@ -68,14 +70,25 @@ class EventServiceUnitTest {
         request.setEndsAt(Instant.parse("2026-03-10T12:00:00Z"));
         request.setCapacity(20);
 
-        when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        Event created = eventService.create(request, ownerId);
+        Event created = eventService.create(request);
 
         assertNotNull(created.getId());
         assertEquals(ownerId, created.getOwnerId());
         assertEquals("Workshop", created.getActivityType());
         assertEquals(20, created.getCapacity());
+        verify(eventRepository).save(any(Event.class));
+    }
+
+    @Test
+    void createRejectsWhenEndsBeforeStarts() {
+        CreateEventRequest request = new CreateEventRequest();
+        request.setTitle("A");
+        request.setLocation("Sao Paulo");
+        request.setActivityType("Mutirao");
+        request.setStartsAt(Instant.parse("2026-03-10T12:00:00Z"));
+        request.setEndsAt(Instant.parse("2026-03-10T10:00:00Z"));
+
+        assertThrows(IllegalArgumentException.class, () -> eventService.create(request));
     }
 
     @Test
@@ -98,8 +111,27 @@ class EventServiceUnitTest {
                 .startsAt(Instant.parse("2026-03-20T10:00:00Z"))
                 .createdAt(Instant.now())
                 .build();
+        Event wrongActivity = Event.builder()
+                .id(UUID.randomUUID())
+                .ownerId(UUID.randomUUID())
+                .title("Mutirao")
+                .location("Sao Paulo")
+                .activityType("Doacao")
+                .startsAt(Instant.parse("2026-03-20T10:00:00Z"))
+                .createdAt(Instant.now())
+                .build();
+        Event beforeFromDate = Event.builder()
+                .id(UUID.randomUUID())
+                .ownerId(UUID.randomUUID())
+                .title("Mutirao")
+                .location("Sao Paulo")
+                .activityType("Limpeza")
+                .startsAt(Instant.parse("2026-03-10T10:00:00Z"))
+                .createdAt(Instant.now())
+                .build();
 
-        when(eventRepository.findAllByOrderByStartsAtAsc()).thenReturn(List.of(matching, wrongLocation));
+        when(eventRepository.findAllByOrderByStartsAtAsc())
+                .thenReturn(List.of(matching, wrongLocation, wrongActivity, beforeFromDate));
 
         List<Event> filtered = eventService.findAvailable("sao paulo", "limpeza", "2026-03-19");
 
@@ -108,8 +140,64 @@ class EventServiceUnitTest {
     }
 
     @Test
+    void listMineDelegatesToRepositoryWithCurrentUser() {
+        UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
+        Event event = Event.builder()
+                .id(UUID.randomUUID())
+                .ownerId(ownerId)
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now())
+                .createdAt(Instant.now())
+                .build();
+        when(eventRepository.findAllByOwnerIdOrderByStartsAtAsc(ownerId)).thenReturn(List.of(event));
+
+        List<Event> mine = eventService.listMine();
+
+        assertEquals(1, mine.size());
+        assertEquals(ownerId, mine.getFirst().getOwnerId());
+    }
+
+    @Test
+    void findOwnedByIdUsesCurrentUser() {
+        UUID ownerId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(ownerId)
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now())
+                .createdAt(Instant.now())
+                .build();
+        when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
+
+        var found = eventService.findOwnedById(eventId);
+
+        assertTrue(found.isPresent());
+        assertEquals(eventId, found.get().getId());
+    }
+
+    @Test
+    void findAccessibleByIdReturnsEmptyWhenEventDoesNotExist() {
+        UUID eventId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(UUID.randomUUID());
+        when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+        assertTrue(eventService.findAccessibleById(eventId).isEmpty());
+    }
+
+    @Test
     void updateRejectsCapacityBelowActiveRegistrations() {
         UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
         UUID eventId = UUID.randomUUID();
         Event event = Event.builder()
                 .id(eventId)
@@ -117,53 +205,73 @@ class EventServiceUnitTest {
                 .title("Old")
                 .location("Sao Paulo")
                 .activityType("Mutirao")
-                .startsAt(Instant.now().plusSeconds(3600))
+                .startsAt(Instant.parse("2026-03-20T10:00:00Z"))
                 .capacity(10)
                 .createdAt(Instant.now())
                 .build();
+
         UpdateEventRequest request = new UpdateEventRequest();
         request.setTitle("New");
         request.setDescription("Desc");
         request.setLocation("Sao Paulo");
         request.setActivityType("Workshop");
-        request.setStartsAt(Instant.now().plusSeconds(7200));
-        request.setEndsAt(Instant.now().plusSeconds(10800));
-        request.setCapacity(1);
+        request.setStartsAt(Instant.parse("2026-03-21T10:00:00Z"));
+        request.setEndsAt(Instant.parse("2026-03-21T12:00:00Z"));
+        request.setCapacity(4);
 
         when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
-        when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(2L);
+        when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(5L);
 
-        assertThrows(IllegalArgumentException.class, () -> eventService.update(eventId, request, ownerId));
+        assertThrows(IllegalArgumentException.class, () -> eventService.update(eventId, request));
+        verify(eventRepository, never()).save(any(Event.class));
     }
 
     @Test
-    void createAnnouncementRequiresOwnerAndPersistsMessage() {
+    void updateSavesEventWhenValid() {
         UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
         UUID eventId = UUID.randomUUID();
         Event event = Event.builder()
                 .id(eventId)
                 .ownerId(ownerId)
-                .title("A")
+                .title("Old")
+                .description("Desc")
                 .location("Sao Paulo")
                 .activityType("Mutirao")
-                .startsAt(Instant.now().plusSeconds(3600))
+                .startsAt(Instant.parse("2026-03-20T10:00:00Z"))
+                .endsAt(Instant.parse("2026-03-20T12:00:00Z"))
+                .capacity(10)
                 .createdAt(Instant.now())
                 .build();
-        CreateAnnouncementRequest request = new CreateAnnouncementRequest();
-        request.setMessage("Levem documento com foto.");
+
+        UpdateEventRequest request = new UpdateEventRequest();
+        request.setTitle("New");
+        request.setDescription("NewDesc");
+        request.setLocation("Sao Paulo");
+        request.setActivityType("Workshop");
+        request.setStartsAt(Instant.parse("2026-03-21T10:00:00Z"));
+        request.setEndsAt(Instant.parse("2026-03-21T12:00:00Z"));
+        request.setCapacity(10);
 
         when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
-        when(announcementRepository.save(any(EventAnnouncement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(0L);
+        when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var created = eventService.createAnnouncement(eventId, request, ownerId);
+        var updated = eventService.update(eventId, request);
 
-        assertEquals(eventId, created.getEventId());
-        assertEquals("Levem documento com foto.", created.getMessage());
+        assertTrue(updated.isPresent());
+        assertEquals("New", updated.get().getTitle());
+        assertEquals("NewDesc", updated.get().getDescription());
+        assertEquals("Workshop", updated.get().getActivityType());
+        assertNotNull(updated.get().getUpdatedAt());
     }
 
     @Test
     void deleteAllowsAdminToRemoveEvent() {
         UUID adminId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(adminId);
+
         UUID ownerId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         Event event = Event.builder()
@@ -175,65 +283,59 @@ class EventServiceUnitTest {
                 .startsAt(Instant.now().plusSeconds(3600))
                 .createdAt(Instant.now())
                 .build();
-        User admin = User.builder()
-                .id(adminId)
-                .email("admin@example.com")
-                .fullName("Admin")
-                .password("HASH")
-                .role(UserRole.ADMIN.name())
-                .createdAt(Instant.now())
-                .build();
+
+        User admin = new User();
+        admin.setId(adminId);
+        admin.setUsername("admin");
+        admin.setEmail("admin@example.com");
+        admin.setFullName("Admin");
+        admin.setRole(UserRole.ADMIN);
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
         when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
 
-        boolean deleted = eventService.delete(eventId, adminId);
+        boolean deleted = eventService.delete(eventId);
 
         assertTrue(deleted);
         verify(eventRepository).delete(event);
     }
 
     @Test
-    void listAnnouncementsAllowsRegisteredVolunteer() {
+    void deleteAllowsOwnerToRemoveEvent() {
+        UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
         UUID eventId = UUID.randomUUID();
-        UUID volunteerId = UUID.randomUUID();
         Event event = Event.builder()
                 .id(eventId)
-                .ownerId(UUID.randomUUID())
+                .ownerId(ownerId)
                 .title("A")
                 .location("Sao Paulo")
                 .activityType("Mutirao")
-                .startsAt(Instant.now())
-                .createdAt(Instant.now())
-                .build();
-        EventRegistration registration = EventRegistration.builder()
-                .id(UUID.randomUUID())
-                .eventId(eventId)
-                .volunteerId(volunteerId)
-                .status(ParticipationStatus.REGISTERED)
-                .registeredAt(Instant.now())
-                .build();
-        EventAnnouncement announcement = EventAnnouncement.builder()
-                .id(UUID.randomUUID())
-                .eventId(eventId)
-                .authorId(event.getOwnerId())
-                .message("Aviso")
+                .startsAt(Instant.now().plusSeconds(3600))
                 .createdAt(Instant.now())
                 .build();
 
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
-        when(registrationRepository.findByEventIdAndVolunteerId(eventId, volunteerId)).thenReturn(Optional.of(registration));
-        when(announcementRepository.findAllByEventIdOrderByCreatedAtDesc(eventId)).thenReturn(List.of(announcement));
 
-        var announcements = eventService.listAnnouncements(eventId, volunteerId);
-
-        assertEquals(1, announcements.size());
-        assertEquals("Aviso", announcements.getFirst().getMessage());
+        assertTrue(eventService.delete(eventId));
+        verify(eventRepository).delete(event);
     }
 
     @Test
-    void buildReportAggregatesCountsByStatus() {
+    void deleteReturnsFalseWhenEventDoesNotExist() {
+        UUID requesterId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(requesterId);
+        when(eventRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
+
+        assertFalse(eventService.delete(UUID.randomUUID()));
+    }
+
+    @Test
+    void buildReportAggregatesCountsByStatusAndAvailableSpots() {
         UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+
         UUID eventId = UUID.randomUUID();
         Event event = Event.builder()
                 .id(eventId)
@@ -245,6 +347,7 @@ class EventServiceUnitTest {
                 .capacity(10)
                 .createdAt(Instant.now())
                 .build();
+
         when(eventRepository.findByIdAndOwnerId(eventId, ownerId)).thenReturn(Optional.of(event));
         when(registrationRepository.findAllByEventIdOrderByRegisteredAtAsc(eventId)).thenReturn(List.of(
                 EventRegistration.builder().id(UUID.randomUUID()).eventId(eventId).volunteerId(UUID.randomUUID()).status(ParticipationStatus.REGISTERED).registeredAt(Instant.now()).build(),
@@ -253,10 +356,58 @@ class EventServiceUnitTest {
         ));
         when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(3L);
 
-        var report = eventService.buildReport(eventId, ownerId);
+        var report = eventService.buildReport(eventId);
 
         assertEquals(3, report.getTotalRegistrations());
         assertEquals(7L, report.getAvailableSpots());
         assertEquals(1L, report.getCountsByStatus().get("PRESENT"));
+        assertEquals(1L, report.getCountsByStatus().get("ABSENT"));
+        assertEquals(1L, report.getCountsByStatus().get("REGISTERED"));
+    }
+
+    @Test
+    void buildReportThrowsWhenEventIsNotOwned() {
+        UUID ownerId = UUID.randomUUID();
+        when(currentUserService.requireUserId()).thenReturn(ownerId);
+        when(eventRepository.findByIdAndOwnerId(any(UUID.class), eq(ownerId))).thenReturn(Optional.empty());
+
+        assertThrows(IllegalArgumentException.class, () -> eventService.buildReport(UUID.randomUUID()));
+    }
+
+    @Test
+    void getAvailableSpotsReturnsMinusOneWhenEventHasNoCapacity() {
+        UUID eventId = UUID.randomUUID();
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now())
+                .capacity(null)
+                .createdAt(Instant.now())
+                .build();
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+        assertEquals(-1L, eventService.getAvailableSpots(eventId));
+    }
+
+    @Test
+    void getAvailableSpotsCalculatesFromCapacityAndActiveRegistrations() {
+        UUID eventId = UUID.randomUUID();
+        Event event = Event.builder()
+                .id(eventId)
+                .ownerId(UUID.randomUUID())
+                .title("A")
+                .location("Sao Paulo")
+                .activityType("Mutirao")
+                .startsAt(Instant.now())
+                .capacity(10)
+                .createdAt(Instant.now())
+                .build();
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+        when(registrationRepository.countByEventIdAndStatusIn(eq(eventId), any(Set.class))).thenReturn(4L);
+
+        assertEquals(6L, eventService.getAvailableSpots(eventId));
     }
 }

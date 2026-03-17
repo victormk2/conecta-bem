@@ -1,8 +1,6 @@
 package br.com.conectabem.service;
 
 import br.com.conectabem.dto.event.CreateEventRequest;
-import br.com.conectabem.dto.event.CreateAnnouncementRequest;
-import br.com.conectabem.dto.event.EventAnnouncementDTO;
 import br.com.conectabem.dto.event.EventReportDTO;
 import br.com.conectabem.dto.event.UpdateEventRequest;
 import br.com.conectabem.model.Event;
@@ -13,27 +11,21 @@ import java.util.UUID;
 
 public interface EventService {
 
-    Event create(CreateEventRequest request, UUID ownerId);
+    Event create(CreateEventRequest request);
 
-    List<Event> findAllByOwner(UUID ownerId);
+    List<Event> listMine();
 
     List<Event> findAvailable(String location, String activityType, String fromDate);
 
-    Optional<Event> findOwnedById(UUID eventId, UUID ownerId);
+    Optional<Event> findOwnedById(UUID eventId);
 
-    Optional<Event> findAccessibleById(UUID eventId, UUID userId);
+    Optional<Event> findAccessibleById(UUID eventId);
 
-    Optional<Event> update(UUID eventId, UpdateEventRequest request, UUID ownerId);
+    Optional<Event> update(UUID eventId, UpdateEventRequest request);
 
-    boolean delete(UUID eventId, UUID requesterId);
+    boolean delete(UUID eventId);
 
-    EventAnnouncementDTO createAnnouncement(UUID eventId,
-                                            CreateAnnouncementRequest request,
-                                            UUID ownerId);
-
-    List<EventAnnouncementDTO> listAnnouncements(UUID eventId, UUID userId);
-
-    EventReportDTO buildReport(UUID eventId, UUID ownerId);
+    EventReportDTO buildReport(UUID eventId);
 
     long getAvailableSpots(UUID eventId);
 }

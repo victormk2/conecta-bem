@@ -9,20 +9,18 @@ import java.util.UUID;
 
 public interface EventRegistrationService {
 
-    EventRegistrationDTO register(UUID eventId, UUID volunteerId);
+    EventRegistrationDTO register(UUID eventId);
 
-    boolean cancelRegistration(UUID eventId, UUID volunteerId);
+    boolean cancelRegistration(UUID eventId);
 
-    List<EventRegistrationDTO> listParticipants(UUID eventId, UUID ownerId);
+    List<EventRegistrationDTO> listParticipants(UUID eventId);
 
-    List<EventRegistrationDTO> listVolunteerHistory(UUID volunteerId, boolean futureOnly);
+    List<EventRegistrationDTO> myRegistrations(boolean futureOnly);
 
     EventRegistrationDTO updateParticipationStatus(UUID eventId,
                                                    UUID volunteerId,
-                                                   UpdateParticipationStatusRequest request,
-                                                   UUID ownerId);
+                                                   UpdateParticipationStatusRequest request);
 
     EventRegistrationDTO justifyAbsence(UUID eventId,
-                                        UUID volunteerId,
                                         JustifyAbsenceRequest request);
 }

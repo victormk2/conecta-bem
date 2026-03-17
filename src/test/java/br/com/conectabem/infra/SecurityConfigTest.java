@@ -1,4 +1,4 @@
-package br.com.conectabem.security;
+package br.com.conectabem.infra;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -10,7 +10,7 @@ class SecurityConfigTest {
 
     @Test
     void passwordEncoderUsesBCrypt() {
-        SecurityConfig config = new SecurityConfig(new JwtUtil("01234567890123456789012345678901", 15));
+        SecurityConfig config = new SecurityConfig(new JwtAuthFilter(null));
 
         PasswordEncoder encoder = config.passwordEncoder();
         String encoded = encoder.encode("senha123");
@@ -19,3 +19,4 @@ class SecurityConfigTest {
         assertTrue(encoder.matches("senha123", encoded));
     }
 }
+

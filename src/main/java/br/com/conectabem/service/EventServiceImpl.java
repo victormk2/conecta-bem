@@ -1,21 +1,17 @@
 package br.com.conectabem.service;
 
-import br.com.conectabem.dto.event.CreateAnnouncementRequest;
 import br.com.conectabem.dto.event.CreateEventRequest;
-import br.com.conectabem.dto.event.EventAnnouncementDTO;
 import br.com.conectabem.dto.event.EventDTO;
 import br.com.conectabem.dto.event.EventReportDTO;
 import br.com.conectabem.dto.event.UpdateEventRequest;
 import br.com.conectabem.model.Event;
-import br.com.conectabem.model.EventAnnouncement;
 import br.com.conectabem.model.EventRegistration;
 import br.com.conectabem.model.ParticipationStatus;
-import br.com.conectabem.model.User;
 import br.com.conectabem.model.UserRole;
-import br.com.conectabem.repository.EventAnnouncementRepository;
 import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -29,6 +25,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class EventServiceImpl implements EventService {
 
     private static final Set<ParticipationStatus> OCCUPYING_STATUSES = Set.of(
@@ -40,22 +37,14 @@ public class EventServiceImpl implements EventService {
 
     private final EventRepository eventRepository;
     private final EventRegistrationRepository registrationRepository;
-    private final EventAnnouncementRepository announcementRepository;
     private final UserRepository userRepository;
-
-    public EventServiceImpl(EventRepository eventRepository,
-                            EventRegistrationRepository registrationRepository,
-                            EventAnnouncementRepository announcementRepository,
-                            UserRepository userRepository) {
-        this.eventRepository = eventRepository;
-        this.registrationRepository = registrationRepository;
-        this.announcementRepository = announcementRepository;
-        this.userRepository = userRepository;
-    }
+    private final CurrentUserService currentUserService;
 
     @Override
-    public Event create(CreateEventRequest request, UUID ownerId) {
+    public Event create(CreateEventRequest request) {
         validateDateRange(request.getStartsAt(), request.getEndsAt());
+
+        UUID ownerId = currentUserService.requireUserId();
 
         Event event = Event.builder()
                 .id(UUID.randomUUID())
@@ -74,8 +63,8 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public List<Event> findAllByOwner(UUID ownerId) {
-        return eventRepository.findAllByOwnerIdOrderByStartsAtAsc(ownerId);
+    public List<Event> listMine() {
+        return eventRepository.findAllByOwnerIdOrderByStartsAtAsc(currentUserService.requireUserId());
     }
 
     @Override
@@ -90,19 +79,20 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public Optional<Event> findOwnedById(UUID eventId, UUID ownerId) {
-        return eventRepository.findByIdAndOwnerId(eventId, ownerId);
+    public Optional<Event> findOwnedById(UUID eventId) {
+        return eventRepository.findByIdAndOwnerId(eventId, currentUserService.requireUserId());
     }
 
     @Override
-    public Optional<Event> findAccessibleById(UUID eventId, UUID userId) {
+    public Optional<Event> findAccessibleById(UUID eventId) {
+        UUID userId = currentUserService.requireUserId();
         return eventRepository.findById(eventId)
                 .filter(event -> canAccessEvent(event, userId));
     }
 
     @Override
-    public Optional<Event> update(UUID eventId, UpdateEventRequest request, UUID ownerId) {
-        return eventRepository.findByIdAndOwnerId(eventId, ownerId)
+    public Optional<Event> update(UUID eventId, UpdateEventRequest request) {
+        return eventRepository.findByIdAndOwnerId(eventId, currentUserService.requireUserId())
                 .map(event -> {
                     validateDateRange(request.getStartsAt(), request.getEndsAt());
                     validateCapacityChange(eventId, request.getCapacity());
@@ -120,45 +110,17 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public boolean delete(UUID eventId, UUID requesterId) {
+    public boolean delete(UUID eventId) {
+        UUID requesterId = currentUserService.requireUserId();
         Optional<Event> event = eventRepository.findById(eventId)
-                .filter(found -> found.getOwnerId().equals(requesterId) );
+                .filter(found -> found.getOwnerId().equals(requesterId) || isAdmin(requesterId));
         event.ifPresent(eventRepository::delete);
         return event.isPresent();
     }
 
     @Override
-    public EventAnnouncementDTO createAnnouncement(UUID eventId,
-                                                   CreateAnnouncementRequest request,
-                                                   UUID ownerId) {
-        Event event = getOwnedEvent(eventId, ownerId);
-        EventAnnouncement announcement = EventAnnouncement.builder()
-                .id(UUID.randomUUID())
-                .eventId(event.getId())
-                .authorId(ownerId)
-                .message(request.getMessage().trim())
-                .createdAt(Instant.now())
-                .build();
-        return toAnnouncementDTO(announcementRepository.save(announcement));
-    }
-
-    @Override
-    public List<EventAnnouncementDTO> listAnnouncements(UUID eventId, UUID userId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("event not found"));
-        if (!canAccessAnnouncements(event, userId)) {
-            throw new IllegalArgumentException("user cannot access event announcements");
-        }
-
-        return announcementRepository.findAllByEventIdOrderByCreatedAtDesc(eventId)
-                .stream()
-                .map(this::toAnnouncementDTO)
-                .toList();
-    }
-
-    @Override
-    public EventReportDTO buildReport(UUID eventId, UUID ownerId) {
-        Event event = getOwnedEvent(eventId, ownerId);
+    public EventReportDTO buildReport(UUID eventId) {
+        Event event = getOwnedEvent(eventId, currentUserService.requireUserId());
         List<EventRegistration> registrations = registrationRepository.findAllByEventIdOrderByRegisteredAtAsc(eventId);
 
         Map<String, Long> counts = new LinkedHashMap<>();
@@ -203,15 +165,13 @@ public class EventServiceImpl implements EventService {
     private boolean canAccessEvent(Event event, UUID userId) {
         return true;
     }
-
-    private boolean canAccessAnnouncements(Event event, UUID userId) {
-        if (event.getOwnerId().equals(userId)) {
-            return true;
-        }
-        return registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId).isPresent();
+    
+    private boolean isAdmin(UUID requesterId) {
+        return userRepository.findById(requesterId)
+                .map(u -> u.getRole())
+                .filter(role -> role == UserRole.ADMIN)
+                .isPresent();
     }
-
-
 
     private void validateDateRange(Instant startsAt, Instant endsAt) {
         if (endsAt != null && startsAt.isAfter(endsAt)) {
@@ -253,15 +213,5 @@ public class EventServiceImpl implements EventService {
         }
         long occupied = registrationRepository.countByEventIdAndStatusIn(event.getId(), OCCUPYING_STATUSES);
         return Math.max(event.getCapacity() - occupied, 0);
-    }
-
-    private EventAnnouncementDTO toAnnouncementDTO(EventAnnouncement announcement) {
-        EventAnnouncementDTO dto = new EventAnnouncementDTO();
-        dto.setId(announcement.getId());
-        dto.setEventId(announcement.getEventId());
-        dto.setAuthorId(announcement.getAuthorId());
-        dto.setCreatedAt(announcement.getCreatedAt());
-        dto.setMessage(announcement.getMessage());
-        return dto;
     }
 }
