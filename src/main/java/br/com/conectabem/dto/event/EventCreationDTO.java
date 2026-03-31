@@ -7,6 +7,5 @@ public record EventCreationDTO(
         String category,
         String startsAt,
         String endsAt,
-        Integer capacity,
-        String ownerId) {
+        Integer capacity) {
 }

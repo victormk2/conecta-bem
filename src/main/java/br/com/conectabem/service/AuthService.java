@@ -42,7 +42,7 @@ public class AuthService {
 
     public String login(LoginRequest request) {
 
-        User user = repository.findByUsername(request.username())
+        User user = repository.findByEmail(request.username())
                 .orElseThrow();
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
