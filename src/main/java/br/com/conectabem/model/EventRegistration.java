@@ -1,15 +1,12 @@
 package br.com.conectabem.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -23,23 +20,35 @@ import java.util.UUID;
 public class EventRegistration {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Column(name = "id", updatable = false, nullable = false, columnDefinition = "UUID")
     private UUID id;
 
-    @Column(nullable = false)
-    private UUID eventId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event", nullable = false)
+    private Event event;
 
-    @Column(nullable = false)
-    private UUID volunteerId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "volunteer", nullable = false)
+    private User volunteer;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(name = "status", nullable = false, length = 32)
     private ParticipationStatus status;
 
-    @Column(length = 2000)
+    @Column(name = "justification", length = 2000)
     private String justification;
 
-    @Column(nullable = false)
+    @Column(name = "registered_at", nullable = false, updatable = false)
     private Instant registeredAt;
 
+    @Column(name = "status_updated_at")
     private Instant statusUpdatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.registeredAt == null) {
+            this.registeredAt = Instant.now();
+        }
+    }
 }

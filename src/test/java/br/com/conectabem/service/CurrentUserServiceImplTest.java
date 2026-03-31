@@ -1,6 +1,7 @@
 package br.com.conectabem.service;
 
 import br.com.conectabem.infra.CurrentUserContext;
+import br.com.conectabem.service.impl.CurrentUserServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;

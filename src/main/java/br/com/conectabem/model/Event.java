@@ -1,53 +1,54 @@
 package br.com.conectabem.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import jakarta.persistence.*;
 import lombok.Data;
-import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
+@Data
 @Entity
 @Table(name = "events")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class Event {
-
     @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Column(name = "id", updatable = false, nullable = false, columnDefinition = "UUID")
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "title", nullable = false, length = 255)
     private String title;
 
-    @Column(length = 3000)
+    @Column(name = "description", length = 3000)
     private String description;
 
-    @Column(nullable = false)
-    private String location;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "address", nullable = false)
+    private Address address;
 
-    @Column(nullable = false)
-    private String activityType;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category", nullable = false)
+    private EventCategory category;
 
-    @Column(nullable = false)
-    private Instant startsAt;
+    @Column(name = "starts_at", nullable = false)
+    private LocalDateTime startsAt;
 
-    private Instant endsAt;
+    @Column(name = "ends_at")
+    private LocalDateTime endsAt;
 
+    @Column(name = "capacity")
     private Integer capacity;
 
-    @Column(nullable = false)
-    private UUID ownerId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner", nullable = false)
+    private User owner;
 
-    @Column(nullable = false)
-    private Instant createdAt;
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
-    private Instant updatedAt;
-
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }
