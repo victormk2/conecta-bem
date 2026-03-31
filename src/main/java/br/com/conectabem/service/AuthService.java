@@ -3,6 +3,7 @@ package br.com.conectabem.service;
 import br.com.conectabem.dto.user.LoginRequest;
 import br.com.conectabem.dto.user.RegisterRequest;
 import br.com.conectabem.model.User;
+import br.com.conectabem.model.UserRole;
 import br.com.conectabem.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class AuthService {
         user.setUsername(request.username());
         user.setEmail(request.email());
         user.setFullName(request.fullName());
+        user.setRole(UserRole.USER);
 
         user.setPassword(passwordEncoder.encode(request.password()));
 
