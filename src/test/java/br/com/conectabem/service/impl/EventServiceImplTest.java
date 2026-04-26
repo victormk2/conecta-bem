@@ -7,7 +7,6 @@ import br.com.conectabem.model.Address;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventCategory;
 import br.com.conectabem.model.User;
-import br.com.conectabem.model.UserRole;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.service.AddressService;
 import br.com.conectabem.service.CurrentUserService;
@@ -21,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -125,7 +123,44 @@ class EventServiceImplTest {
         }
 
         @Test
-        void shouldAttachImageWhenProvided() throws Exception {
+        void shouldIgnoreImageWhenFileIsEmpty() {
+            var dto = new EventCreationDTO(
+                    "Evento com imagem",
+                    "Descricao",
+                    "00000000-0000-0000-0000-000000000002",
+                    "SOCIAL",
+                    "2026-04-15T10:00:00",
+                    "2026-04-15T14:00:00",
+                    20
+            );
+
+            var ownerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var addressId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+            var owner = new User();
+            owner.setId(ownerId);
+
+            var address = new Address();
+            address.setId(addressId);
+
+            var eventFromMapper = new Event();
+            var image = mock(MultipartFile.class);
+
+            when(image.isEmpty()).thenReturn(true);
+            when(creationToEntity.map(dto)).thenReturn(eventFromMapper);
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(userService.findById(ownerId)).thenReturn(owner);
+            when(addressService.findById(addressId)).thenReturn(address);
+            when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            var result = eventService.createWithImage(dto, image);
+
+            assertThat(result).isSameAs(eventFromMapper);
+            assertThat(result.getImage()).isNull();
+            verify(eventRepository).save(any(Event.class));
+        }
+
+        @Test
+        void shouldAttachImageWhenValidImageIsProvided() throws Exception {
             var dto = new EventCreationDTO(
                     "Evento com imagem",
                     "Descricao",
