@@ -10,6 +10,7 @@ import br.com.conectabem.model.User;
 import br.com.conectabem.model.UserRole;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.service.AddressService;
+import br.com.conectabem.service.CurrentUserService;
 import br.com.conectabem.service.UserService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -17,14 +18,18 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +48,9 @@ class EventServiceImplTest {
     @Mock
     private AddressService addressService;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private EventServiceImpl eventService;
 
@@ -57,8 +65,7 @@ class EventServiceImplTest {
                     "ENVIRONMENT",
                     "2026-04-15T10:00:00",
                     "2026-04-15T14:00:00",
-                    50,
-                    "00000000-0000-0000-0000-000000000001"
+                    50
             );
 
             var ownerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -92,6 +99,7 @@ class EventServiceImplTest {
             savedEvent.setAddress(address);
 
             when(creationToEntity.map(dto)).thenReturn(eventFromMapper);
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
             when(userService.findById(ownerId)).thenReturn(owner);
             when(addressService.findById(addressId)).thenReturn(address);
             when(eventRepository.save(any(Event.class))).thenReturn(savedEvent);
@@ -115,6 +123,46 @@ class EventServiceImplTest {
             verify(addressService).findById(addressId);
             verify(eventRepository).save(any(Event.class));
         }
+
+        @Test
+        void shouldAttachImageWhenProvided() throws Exception {
+            var dto = new EventCreationDTO(
+                    "Evento com imagem",
+                    "Descricao",
+                    "00000000-0000-0000-0000-000000000002",
+                    "SOCIAL",
+                    "2026-04-15T10:00:00",
+                    "2026-04-15T14:00:00",
+                    20
+            );
+
+            var ownerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var addressId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+            var imageBytes = new byte[]{1, 2, 3};
+
+            var owner = new User();
+            owner.setId(ownerId);
+
+            var address = new Address();
+            address.setId(addressId);
+
+            var eventFromMapper = new Event();
+            var image = mock(MultipartFile.class);
+
+            when(image.isEmpty()).thenReturn(false);
+            when(image.getContentType()).thenReturn("image/png");
+            when(image.getBytes()).thenReturn(imageBytes);
+            when(creationToEntity.map(dto)).thenReturn(eventFromMapper);
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(userService.findById(ownerId)).thenReturn(owner);
+            when(addressService.findById(addressId)).thenReturn(address);
+            when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            var result = eventService.createWithImage(dto, image);
+
+            assertThat(result.getImage()).containsExactly(imageBytes);
+            verify(eventRepository).save(any(Event.class));
+        }
     }
 
     @Nested
@@ -125,6 +173,7 @@ class EventServiceImplTest {
             event1.setId(UUID.randomUUID());
             event1.setTitle("Limpeza do Parque");
             event1.setCategory(EventCategory.ENVIRONMENT);
+            event1.setImage(new byte[]{1, 2, 3});
 
             var event2 = new Event();
             event2.setId(UUID.randomUUID());
@@ -145,6 +194,8 @@ class EventServiceImplTest {
             assertThat(result.events())
                     .hasSize(2)
                     .containsExactly(event1, event2);
+
+            assertThat(result.events().get(0).getImage()).containsExactly(1, 2, 3);
         }
 
         @Test
@@ -175,6 +226,61 @@ class EventServiceImplTest {
             assertThat(result)
                     .isNotNull()
                     .hasFieldOrPropertyWithValue("total", 25L);
+        }
+    }
+
+    @Nested
+    class RemoveImageTest {
+        @Test
+        void shouldRemoveImageWhenEventExists() {
+            var eventId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var event = new Event();
+            event.setId(eventId);
+            event.setImage(new byte[]{1, 2, 3});
+
+            when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+            var result = eventService.removeImageByEventId(eventId.toString());
+
+            assertThat(result).isTrue();
+            assertThat(event.getImage()).isNull();
+            verify(eventRepository).save(event);
+        }
+
+        @Test
+        void shouldReturnFalseWhenEventDoesNotExist() {
+            var eventId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+            var result = eventService.removeImageByEventId(eventId.toString());
+
+            assertThat(result).isFalse();
+            verify(eventRepository, never()).save(any(Event.class));
+        }
+    }
+
+    @Nested
+    class FindByIdTest {
+        @Test
+        void shouldReturnEventWhenFound() {
+            var eventId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var event = new Event();
+            event.setId(eventId);
+            when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+            var result = eventService.findById(eventId.toString());
+
+            assertThat(result).isEqualTo(event);
+        }
+
+        @Test
+        void shouldReturnNullWhenEventDoesNotExist() {
+            var eventId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+            var result = eventService.findById(eventId.toString());
+
+            assertThat(result).isNull();
         }
     }
 }

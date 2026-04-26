@@ -52,6 +52,13 @@ public class AuthService {
         return jwtService.generateToken(user.getUsername());
     }
 
+    public String getUserId(String username) {
+        User user = repository.findByEmail(username)
+                .orElseThrow();
+
+        return user.getId().toString();
+    }
+
     public boolean checkAccess(String token) {
         try {
             String username = jwtService.extractUsername(token);

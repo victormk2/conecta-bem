@@ -21,11 +21,15 @@ public class AuthController {
 
     @PostMapping("/register")
     public LoginResponse register(@RequestBody RegisterRequest request) {
-        return new LoginResponse(service.register(request), Instant.now().plusSeconds(86400));
+        var token = service.register(request);
+        var id = service.getUserId(request.username());
+        return new LoginResponse(token, Instant.now().plusSeconds(86400), id);
     }
 
     @PostMapping("/login")
     public LoginResponse login(@RequestBody LoginRequest request) {
-        return new LoginResponse(service.login(request), Instant.now().plusSeconds(86400));
+        var token = service.login(request);
+        var id = service.getUserId(request.username());
+        return new LoginResponse(token, Instant.now().plusSeconds(86400), id);
     }
 }

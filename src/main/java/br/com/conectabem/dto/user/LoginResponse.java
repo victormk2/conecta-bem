@@ -4,5 +4,6 @@ import java.time.Instant;
 
 public record LoginResponse (
     String jwtToken,
-    Instant expiration
+    Instant expiration,
+    String userId
 ){}

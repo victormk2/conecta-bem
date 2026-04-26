@@ -31,8 +31,7 @@ class EventCreationToEntityTest {
                     "ENVIRONMENT",
                     startsAt,
                     endsAt,
-                    50,
-                    "uuid-owner-456"
+                    50
             );
 
             var result = eventCreationToEntity.map(source);
@@ -56,8 +55,7 @@ class EventCreationToEntityTest {
                     "SOCIAL",
                     "2026-05-01T09:00:00",
                     "2026-05-01T12:00:00",
-                    100,
-                    "uuid-owner-456"
+                    100
             );
 
             var result = eventCreationToEntity.map(source);

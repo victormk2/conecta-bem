@@ -40,6 +40,9 @@ public class Event {
     @Column(name = "capacity")
     private Integer capacity;
 
+    @Column(name = "image")
+    private byte[] image;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner", nullable = false)
     private User owner;

@@ -17,7 +17,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
@@ -74,11 +73,11 @@ class AuthServiceUnitTest {
         user.setRole(UserRole.USER);
         user.setPassword("HASH");
 
-        when(userRepository.findByUsername("u")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("u@e.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("senha123", "HASH")).thenReturn(true);
         when(jwtService.generateToken("u")).thenReturn("jwt");
 
-        String token = authService.login(new LoginRequest("u", "senha123"));
+        String token = authService.login(new LoginRequest("u@e.com", "senha123"));
 
         assertEquals("jwt", token);
     }
@@ -87,12 +86,13 @@ class AuthServiceUnitTest {
     void loginThrowsWhenPasswordDoesNotMatch() {
         User user = new User();
         user.setUsername("u");
+        user.setEmail("u@e.com");
         user.setPassword("HASH");
 
-        when(userRepository.findByUsername("u")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("u@e.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "HASH")).thenReturn(false);
 
-        assertThrows(RuntimeException.class, () -> authService.login(new LoginRequest("u", "wrong")));
+        assertThrows(RuntimeException.class, () -> authService.login(new LoginRequest("u@e.com", "wrong")));
     }
 
     @Test

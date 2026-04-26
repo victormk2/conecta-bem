@@ -1,6 +1,8 @@
 package br.com.conectabem.controller;
 
 import br.com.conectabem.dto.event.EventListRequest;
+import br.com.conectabem.dto.event.EventCreationDTO;
+import br.com.conectabem.model.Event;
 import br.com.conectabem.service.EventService;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Nested;
@@ -12,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatusCode;
 
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class EventControllerTest {
@@ -33,13 +36,76 @@ class EventControllerTest {
     }
 
     @Nested
+    class FindByIdTest {
+        @Test
+        void shouldReturnEventWhenFound() {
+            var eventId = "00000000-0000-0000-0000-000000000001";
+            var event = new Event();
+            when(eventService.findById(eventId)).thenReturn(event);
+
+            var response = eventController.findById(eventId);
+
+            verify(eventService).findById(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
+            Assertions.assertThat(response.getBody()).isEqualTo(event);
+        }
+
+        @Test
+        void shouldReturnNotFoundWhenEventDoesNotExist() {
+            var eventId = "00000000-0000-0000-0000-000000000001";
+            when(eventService.findById(eventId)).thenReturn(null);
+
+            var response = eventController.findById(eventId);
+
+            verify(eventService).findById(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(404));
+        }
+    }
+
+    @Nested
     class CreateTest {
         @Test
         void shouldCallService() {
-            var input = new EventListRequest();
-            var response = eventController.list(input);
-            verify(eventService).list(input);
-            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
+            var input = new EventCreationDTO(
+                    "Mutirao",
+                    "Descricao",
+                    "00000000-0000-0000-0000-000000000001",
+                    "SOCIAL",
+                    "2026-04-15T10:00:00",
+                    "2026-04-15T14:00:00",
+                    10
+            );
+            when(eventService.createWithImage(input, null)).thenReturn(new Event());
+
+            var response = eventController.create(input, null);
+
+            verify(eventService).createWithImage(input, null);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(201));
+        }
+    }
+
+    @Nested
+    class RemoveImageTest {
+        @Test
+        void shouldReturnNoContentWhenImageIsRemoved() {
+            var eventId = "00000000-0000-0000-0000-000000000001";
+            when(eventService.removeImageByEventId(eventId)).thenReturn(true);
+
+            var response = eventController.removeImage(eventId);
+
+            verify(eventService).removeImageByEventId(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(204));
+        }
+
+        @Test
+        void shouldReturnNotFoundWhenEventDoesNotExist() {
+            var eventId = "00000000-0000-0000-0000-000000000001";
+            when(eventService.removeImageByEventId(eventId)).thenReturn(false);
+
+            var response = eventController.removeImage(eventId);
+
+            verify(eventService).removeImageByEventId(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(404));
         }
     }
 }
