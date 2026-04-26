@@ -1,6 +1,5 @@
 package br.com.conectabem.controller;
 
-import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -36,7 +35,7 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
-    void handleValidationReturnsFieldMap() throws Exception {
+    void handleValidationReturnsUnprocessableEntityWithFieldMap() throws Exception {
         BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "request");
         bindingResult.addError(new FieldError("request", "email", "must not be blank"));
         bindingResult.addError(new FieldError("request", "password", "size must be between 8 and 2147483647"));
@@ -47,7 +46,7 @@ class ApiExceptionHandlerTest {
 
         ResponseEntity<?> response = handler.handleValidation(exception);
 
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
         assertEquals(Map.of(
                 "email", "must not be blank",
                 "password", "size must be between 8 and 2147483647"
