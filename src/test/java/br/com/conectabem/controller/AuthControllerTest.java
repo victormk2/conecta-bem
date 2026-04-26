@@ -3,11 +3,14 @@ package br.com.conectabem.controller;
 import br.com.conectabem.dto.user.LoginRequest;
 import br.com.conectabem.dto.user.LoginResponse;
 import br.com.conectabem.dto.user.RegisterRequest;
+import br.com.conectabem.model.Gender;
 import br.com.conectabem.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
@@ -21,7 +24,7 @@ class AuthControllerTest {
     @Test
     void registerReturnsJwtInResponse() {
         AuthController controller = new AuthController(authService);
-        RegisterRequest request = new RegisterRequest("u", "senha123", "u@e.com", "User");
+        RegisterRequest request = createRegisterRequest();
 
         when(authService.register(request)).thenReturn("jwt");
 
@@ -40,6 +43,21 @@ class AuthControllerTest {
         LoginResponse response = controller.login(request);
 
         assertEquals("jwt", response.jwtToken());
+    }
+
+    RegisterRequest createRegisterRequest(){
+        return new RegisterRequest(
+                "u",
+                "senha123",
+                "u@e.com",
+                "User",
+                "12345678901",
+                LocalDate.of(2000, 1, 15),
+                Gender.MALE,
+                "47999990000",
+                "userinstagram",
+                "https://linkedin.com/in/u"
+        );
     }
 }
 
