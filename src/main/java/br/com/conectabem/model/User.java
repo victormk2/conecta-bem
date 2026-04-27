@@ -5,6 +5,7 @@ import lombok.Data;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Data
@@ -35,6 +36,25 @@ public class User {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "cpf_cnpj", length = 14)
+    private String cpfCnpj;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private Gender gender;
+
+    @Column(length = 20)
+    private String phone;
+
+    @Column(length = 100)
+    private String instagram;
+
+    @Column(length = 255)
+    private String linkedin;
 
     @PrePersist
     protected void onCreate() {

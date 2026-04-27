@@ -1,5 +1,7 @@
 package br.com.conectabem.service;
 
+import br.com.conectabem.dto.user.UpdatePasswordRequest;
+import br.com.conectabem.dto.user.UpdateProfileRequest;
 import br.com.conectabem.model.User;
 
 import java.util.UUID;
@@ -7,4 +9,8 @@ import java.util.UUID;
 public interface UserService {
 
     User findById(UUID id);
+
+    void updateProfile(UUID id, UpdateProfileRequest request);
+
+    void updatePassword(UUID id, UpdatePasswordRequest request);
 }

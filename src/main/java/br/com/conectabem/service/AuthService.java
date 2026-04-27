@@ -25,15 +25,19 @@ public class AuthService {
     }
 
     public String register(RegisterRequest request) {
-
         User user = new User();
 
         user.setUsername(request.username());
         user.setEmail(request.email());
         user.setFullName(request.fullName());
         user.setRole(UserRole.USER);
-
         user.setPassword(passwordEncoder.encode(request.password()));
+        user.setCpfCnpj(request.cpfCnpj());
+        user.setBirthDate(request.birthDate());
+        user.setGender(request.gender());
+        user.setPhone(request.phone());
+        user.setInstagram(request.instagram());
+        user.setLinkedin(request.linkedin());
 
         repository.save(user);
 
