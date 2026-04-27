@@ -1,5 +1,6 @@
 package br.com.conectabem.service.impl;
 
+import br.com.conectabem.dto.user.UpdatePasswordRequest;
 import br.com.conectabem.dto.user.UpdateProfileRequest;
 import br.com.conectabem.model.Gender;
 import br.com.conectabem.model.User;
@@ -12,6 +13,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -30,6 +32,9 @@ class UserServiceImplTest {
 
     @InjectMocks
     private UserServiceImpl userService;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     @Nested
     class FindByIdTest {
@@ -120,6 +125,99 @@ class UserServiceImplTest {
             when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> userService.updateProfile(userId, request))
+                    .isInstanceOf(ResponseStatusException.class);
+
+            verify(userRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    class UpdatePasswordTest {
+
+        @Test
+        void shouldUpdatePasswordSuccessfully() {
+            var userId = UUID.randomUUID();
+            var user = buildUser(userId);
+            user.setPassword("encoded-old");
+            user.setEmail("user@test.com");
+
+            var request = new UpdatePasswordRequest("user@test.com", "old-pass", "new-pass");
+
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches("old-pass", "encoded-old")).thenReturn(true);
+            when(passwordEncoder.matches("new-pass", "encoded-old")).thenReturn(false);
+            when(passwordEncoder.encode("new-pass")).thenReturn("encoded-new");
+
+            userService.updatePassword(userId, request);
+
+            var captor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(captor.capture());
+
+            var saved = captor.getValue();
+            assertThat(saved.getPassword()).isEqualTo("encoded-new");
+        }
+
+        @Test
+        void shouldThrowWhenEmailDoesNotMatch() {
+            var userId = UUID.randomUUID();
+            var user = buildUser(userId);
+            user.setEmail("correct@test.com");
+
+            var request = new UpdatePasswordRequest("wrong@test.com", "old-pass", "new-pass");
+
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> userService.updatePassword(userId, request))
+                    .isInstanceOf(ResponseStatusException.class);
+
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenCurrentPasswordIsWrong() {
+            var userId = UUID.randomUUID();
+            var user = buildUser(userId);
+            user.setPassword("encoded-old");
+            user.setEmail("user@test.com");
+
+            var request = new UpdatePasswordRequest("user@test.com", "wrong-pass", "new-pass");
+
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches("wrong-pass", "encoded-old")).thenReturn(false);
+
+            assertThatThrownBy(() -> userService.updatePassword(userId, request))
+                    .isInstanceOf(ResponseStatusException.class);
+
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenNewPasswordIsSameAsCurrent() {
+            var userId = UUID.randomUUID();
+            var user = buildUser(userId);
+            user.setPassword("encoded-old");
+            user.setEmail("user@test.com");
+
+            var request = new UpdatePasswordRequest("user@test.com", "old-pass", "old-pass");
+
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches("old-pass", "encoded-old")).thenReturn(true);
+            when(passwordEncoder.matches("old-pass", "encoded-old")).thenReturn(true);
+
+            assertThatThrownBy(() -> userService.updatePassword(userId, request))
+                    .isInstanceOf(ResponseStatusException.class);
+
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenUserDoesNotExist() {
+            var userId = UUID.randomUUID();
+            var request = new UpdatePasswordRequest("user@test.com", "old-pass", "new-pass");
+
+            when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.updatePassword(userId, request))
                     .isInstanceOf(ResponseStatusException.class);
 
             verify(userRepository, never()).save(any());

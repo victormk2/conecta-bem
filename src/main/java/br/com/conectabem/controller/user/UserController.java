@@ -1,5 +1,6 @@
 package br.com.conectabem.controller.user;
 
+import br.com.conectabem.dto.user.UpdatePasswordRequest;
 import br.com.conectabem.dto.user.UpdateProfileRequest;
 import br.com.conectabem.dto.user.UserProfileResponse;
 import br.com.conectabem.service.CurrentUserService;
@@ -27,6 +28,13 @@ public class UserController {
     public ResponseEntity<Void> updateProfile(@RequestBody UpdateProfileRequest request) {
         var userId = currentUserService.requireUserId();
         userService.updateProfile(userId, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Void> updateProfile(@RequestBody UpdatePasswordRequest request) {
+        var userId = currentUserService.requireUserId();
+        userService.updatePassword(userId, request);
         return ResponseEntity.noContent().build();
     }
 }
