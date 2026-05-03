@@ -35,6 +35,7 @@ public class UserServiceImpl implements UserService {
         if (request.phone()     != null) user.setPhone(request.phone());
         if (request.instagram() != null) user.setInstagram(request.instagram());
         if (request.linkedin()  != null) user.setLinkedin(request.linkedin());
+        if (request.cpfCnpj()   != null) user.setCpfCnpj(request.cpfCnpj());
 
         userRepository.save(user);
     }

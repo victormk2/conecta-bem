@@ -65,7 +65,7 @@ class UserControllerTest {
         void shouldCallServiceAndReturnNoContent() {
             var userId = UUID.randomUUID();
             var request = new UpdateProfileRequest(
-                    "joao@gmail.com", Gender.MALE, "47911110000", "joao123", "https://linkedin.com/in/joao123"
+                    "joao@gmail.com", null, Gender.MALE, "47911110000", "joao123", "https://linkedin.com/in/joao123"
             );
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -80,7 +80,7 @@ class UserControllerTest {
         @Test
         void shouldPassCorrectUserIdToService() {
             var userId = UUID.randomUUID();
-            var request = new UpdateProfileRequest(null, null, null, "joao123", null);
+            var request = new UpdateProfileRequest(null, null, null, null, "joao123", null);
 
             when(currentUserService.requireUserId()).thenReturn(userId);
 

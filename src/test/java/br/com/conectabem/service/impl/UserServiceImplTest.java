@@ -77,7 +77,7 @@ class UserServiceImplTest {
             var userId = UUID.randomUUID();
             var user = buildUser(userId);
             var request = new UpdateProfileRequest(
-                    "joao@gmail.com", Gender.FEMALE, "47911110000", "joao123", "https://linkedin.com/in/joao123"
+                    "joao@gmail.com", "47304057000148", Gender.FEMALE, "47911110000", "joao123", "https://linkedin.com/in/joao123"
             );
 
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -89,6 +89,7 @@ class UserServiceImplTest {
 
             var saved = captor.getValue();
             assertThat(saved.getEmail()).isEqualTo("joao@gmail.com");
+            assertThat(saved.getCpfCnpj()).isEqualTo("47304057000148");
             assertThat(saved.getGender()).isEqualTo(Gender.FEMALE);
             assertThat(saved.getPhone()).isEqualTo("47911110000");
             assertThat(saved.getInstagram()).isEqualTo("joao123");
@@ -102,7 +103,7 @@ class UserServiceImplTest {
             user.setEmail("joao@gmail.com");
             user.setPhone("47999990000");
 
-            var request = new UpdateProfileRequest(null, null, null, "joao123", null);
+            var request = new UpdateProfileRequest(null, null, null, null, "joao123", null);
 
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
@@ -120,7 +121,7 @@ class UserServiceImplTest {
         @Test
         void shouldThrowNotFoundWhenUserDoesNotExist() {
             var userId = UUID.randomUUID();
-            var request = new UpdateProfileRequest("joao@gmail.com", null, null, null, null);
+            var request = new UpdateProfileRequest("joao@gmail.com", null, null, null, null, null);
 
             when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
