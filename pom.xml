@@ -136,6 +136,12 @@
             <scope>provided</scope>
         </dependency>
 
+		<dependency>
+			<groupId>io.github.cdimascio</groupId>
+			<artifactId>dotenv-java</artifactId>
+			<version>3.0.0</version>
+		</dependency>
+
         <!-- BCrypt is provided by spring-security, but ensure password encoder support -->
 
 	</dependencies>
