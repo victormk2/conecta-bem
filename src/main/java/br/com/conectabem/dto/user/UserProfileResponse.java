@@ -4,7 +4,7 @@ import br.com.conectabem.model.User;
 
 public record UserProfileResponse(
         String fullName,
-        String cpfOrCnpj,
+        String cpfCnpj,
         String birthDate,
         String email,
         String gender,
