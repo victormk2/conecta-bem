@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.Objects;
 
 @Service
@@ -30,10 +31,11 @@ public class PasswordResetService {
     @Transactional
     public void forgotPassword(String email) {
         userRepository.findByEmail(email).ifPresent(user -> {
-            String newPassword = generatePassword();
-            user.setPassword(passwordEncoder.encode(newPassword));
+            String tempPassword = generatePassword();
+            user.setTemporaryPassword(passwordEncoder.encode(tempPassword));
+            user.setTemporaryPasswordExpiresAt(Instant.now().plusSeconds(300));
             userRepository.save(user);
-            sendEmail(email, newPassword);
+            sendEmail(email, tempPassword);
         });
     }
 

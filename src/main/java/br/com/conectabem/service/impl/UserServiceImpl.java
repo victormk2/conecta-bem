@@ -11,6 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -48,19 +49,41 @@ public class UserServiceImpl implements UserService {
         if (!user.getEmail().equals(request.email())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email mismatch");
         }
-        if (request.currentPassword() == null || request.currentPassword().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");
-        }
         if (request.newPassword() == null || request.newPassword().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password is required");
         }
-        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Current password is incorrect");
+
+        boolean usingTempPassword = request.temporaryPassword() != null;
+
+        if (usingTempPassword) {
+            if (user.getTemporaryPassword() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No temporary password set");
+            }
+            if (Instant.now().isAfter(user.getTemporaryPasswordExpiresAt())) {
+                user.setTemporaryPassword(null);
+                user.setTemporaryPasswordExpiresAt(null);
+                userRepository.save(user);
+                throw new ResponseStatusException(HttpStatus.GONE, "Temporary password has expired");
+            }
+            if (!passwordEncoder.matches(request.temporaryPassword(), user.getTemporaryPassword())) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid temporary password");
+            }
+        } else {
+            if (request.currentPassword() == null || request.currentPassword().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");
+            }
+            if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Current password is incorrect");
+            }
         }
+
         if (passwordEncoder.matches(request.newPassword(), user.getPassword())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be different");
         }
+
         user.setPassword(passwordEncoder.encode(request.newPassword()));
+        user.setTemporaryPassword(null);
+        user.setTemporaryPasswordExpiresAt(null);
         userRepository.save(user);
     }
 }
