@@ -49,16 +49,16 @@ public class PasswordResetService {
         return sb.toString();
     }
 
-    private void sendEmail(String to, String newPassword) {
+    private void sendEmail(String to, String tempPassword) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setTo(to);
-            helper.setSubject("Sua nova senha — ConectaBem");
+            helper.setSubject("Redefinição de senha — ConectaBem");
 
             String html = loadEmailTemplate()
-                    .replace("{{NEW_PASSWORD}}", newPassword)
-                    .replace("{{LOGIN_URL}}", frontendUrl + "/login");
+                    .replace("{{TEMP_PASSWORD}}", tempPassword)
+                    .replace("{{RESET_URL}}", frontendUrl + "/alterar-senha");
 
             helper.setText(html, true);
             mailSender.send(message);
