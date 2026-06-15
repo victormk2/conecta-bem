@@ -63,6 +63,7 @@ public class PasswordResetService {
             helper.setText(html, true);
             mailSender.send(message);
         } catch (Exception e) {
+            e.printStackTrace();
             throw new RuntimeException("Falha ao enviar email de recuperação", e);
         }
     }

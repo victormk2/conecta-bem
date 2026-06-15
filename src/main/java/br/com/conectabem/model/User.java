@@ -56,7 +56,7 @@ public class User {
     @Column(length = 255)
     private String linkedin;
 
-    @Column(name = "temporary_password", length = 10)
+    @Column(name = "temporary_password", length = 255)
     private String temporaryPassword;
 
     @Column(name = "temporary_password_expires_at")
