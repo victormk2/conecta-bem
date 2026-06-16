@@ -41,8 +41,6 @@ public class EventServiceImpl implements EventService {
     private final AddressService addressService;
     private final CurrentUserService currentUserService;
 
-    // ── Create ────────────────────────────────────────────────────────────────
-
     @Override
     @Transactional
     public Event create(EventCreationDTO eventCreationDTO) {
@@ -58,8 +56,6 @@ public class EventServiceImpl implements EventService {
         applyImageIfPresent(baseEntity, image);
         return eventRepository.save(baseEntity);
     }
-
-    // ── Update ────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -91,8 +87,6 @@ public class EventServiceImpl implements EventService {
         return null;
     }
 
-    // ── Image ─────────────────────────────────────────────────────────────────
-
     @Override
     @Transactional
     public boolean removeImageByEventId(String eventId) {
@@ -107,14 +101,10 @@ public class EventServiceImpl implements EventService {
         return true;
     }
 
-    // ── Find ──────────────────────────────────────────────────────────────────
-
     @Override
     public Event findById(String eventId) {
         return eventRepository.findById(UUID.fromString(eventId)).orElse(null);
     }
-
-    // ── List (public — excludes finished events, includes live enrolledCount) ──
 
     @Override
     @Transactional(readOnly = true)
@@ -129,8 +119,6 @@ public class EventServiceImpl implements EventService {
 
         return new EventListResponse(events, (long) events.size());
     }
-
-    // ── DTO conversion ────────────────────────────────────────────────────────
 
     @Override
     public EventResponse toEventResponse(Event event) {
@@ -157,8 +145,6 @@ public class EventServiceImpl implements EventService {
                 imageUrl
         );
     }
-
-    // ── Internal ──────────────────────────────────────────────────────────────
 
     private void applyImageIfPresent(Event event, MultipartFile image) {
         if (image == null || image.isEmpty()) return;
