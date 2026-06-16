@@ -28,7 +28,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EventRegistrationServiceImpl implements EventRegistrationService {
 
-    /** Statuses that count as "active" enrollment (i.e. occupying a spot). */
     private static final Set<ParticipationStatus> ACTIVE_STATUSES =
             Set.of(ParticipationStatus.REGISTERED, ParticipationStatus.PRESENT);
 
@@ -49,13 +48,11 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                     HttpStatus.FORBIDDEN, "O dono do evento não pode se inscrever nele.");
         }
 
-        // 2. Event must not have ended
         if (LocalDateTime.now().isAfter(event.getEndsAt())) {
             throw new ResponseStatusException(
                     HttpStatus.UNPROCESSABLE_ENTITY, "Este evento já foi encerrado.");
         }
 
-        // 3. No duplicate active registration
         registrationRepository
                 .findByEventIdAndVolunteerId(eventId, userId)
                 .ifPresent(existing -> {
@@ -65,7 +62,6 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                     }
                 });
 
-        // 4. Capacity check (count only active registrations)
         long activeCount = registrationRepository
                 .countByEventIdAndStatusIn(eventId, ACTIVE_STATUSES);
         if (event.getCapacity() != null && activeCount >= event.getCapacity()) {
