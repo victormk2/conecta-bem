@@ -37,8 +37,6 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     private final CurrentUserService currentUserService;
     private final UserService userService;
 
-    // ── Enroll ───────────────────────────────────────────────────────────────
-
     @Override
     @Transactional
     public void enroll(UUID eventId) {
@@ -46,7 +44,6 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
         Event event = requireEvent(eventId);
         User user   = userService.findById(userId);
 
-        // 1. Owner cannot join their own event
         if (event.getOwner().getId().equals(userId)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "O dono do evento não pode se inscrever nele.");
@@ -85,15 +82,12 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
         registrationRepository.save(registration);
     }
 
-    // ── Cancel ───────────────────────────────────────────────────────────────
-
     @Override
     @Transactional
     public void cancel(UUID eventId) {
         UUID userId = currentUserService.requireUserId();
         Event event = requireEvent(eventId);
 
-        // Can only cancel before the event starts
         if (LocalDateTime.now().isAfter(event.getStartsAt())) {
             throw new ResponseStatusException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -114,8 +108,6 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
         registrationRepository.save(registration);
     }
 
-    // ── Status ───────────────────────────────────────────────────────────────
-
     @Override
     @Transactional(readOnly = true)
     public EnrollmentStatusDTO getEnrollmentStatus(UUID eventId) {
@@ -128,8 +120,6 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
 
         return new EnrollmentStatusDTO(enrolled);
     }
-
-    // ── Participants (owner only) ─────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
@@ -150,8 +140,6 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                 .toList();
     }
 
-    // ── My enrolled events ────────────────────────────────────────────────────
-
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> getMyEnrolledEvents() {
@@ -164,8 +152,6 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                 .map(r -> toEventResponse(r.getEvent()))
                 .toList();
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private Event requireEvent(UUID eventId) {
         return eventRepository.findById(eventId)

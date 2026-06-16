@@ -34,10 +34,6 @@ public class EventRegistrationController {
         return ResponseEntity.ok(registrationService.getEnrollmentStatus(id));
     }
 
-    /**
-     * GET /events/{id}/enrollments
-     * Returns all active participants (restricted to event owner).
-     */
     @GetMapping("/{id}/enrollments")
     public ResponseEntity<List<ParticipantDTO>> participants(@PathVariable UUID id) {
         return ResponseEntity.ok(registrationService.getParticipants(id));

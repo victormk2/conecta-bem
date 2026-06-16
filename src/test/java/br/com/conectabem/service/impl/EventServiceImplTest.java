@@ -7,6 +7,7 @@ import br.com.conectabem.model.Address;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventCategory;
 import br.com.conectabem.model.User;
+import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.service.AddressService;
 import br.com.conectabem.service.CurrentUserService;
@@ -26,6 +27,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -36,6 +39,9 @@ class EventServiceImplTest {
 
     @Mock
     private EventRepository eventRepository;
+
+    @Mock
+    private EventRegistrationRepository registrationRepository;
 
     @Mock
     private Mapper<EventCreationDTO, Event> creationToEntity;
@@ -203,34 +209,49 @@ class EventServiceImplTest {
     @Nested
     class ListTest {
         @Test
-        void shouldReturnListOfEvents() {
-            var event1 = new Event();
-            event1.setId(UUID.randomUUID());
-            event1.setTitle("Limpeza do Parque");
-            event1.setCategory(EventCategory.ENVIRONMENT);
-            event1.setImage(new byte[]{1, 2, 3});
+        void shouldReturnOnlyEventsThatHaveNotEnded() {
+            var now = LocalDateTime.now();
 
-            var event2 = new Event();
-            event2.setId(UUID.randomUUID());
-            event2.setTitle("Doação de Alimentos");
-            event2.setCategory(EventCategory.SOCIAL);
+            var futureEvent = buildEvent(
+                    UUID.randomUUID(), "Limpeza do Parque", EventCategory.ENVIRONMENT,
+                    now.plusDays(1), now.plusDays(1).plusHours(4)
+            );
+            var pastEvent = buildEvent(
+                    UUID.randomUUID(), "Evento Encerrado", EventCategory.SOCIAL,
+                    now.minusDays(5), now.minusDays(5).plusHours(4)
+            );
 
             var request = new EventListRequest();
 
-            when(eventRepository.findAll()).thenReturn(List.of(event1, event2));
-            when(eventRepository.count()).thenReturn(2L);
+            when(eventRepository.findAll()).thenReturn(List.of(futureEvent, pastEvent));
+            when(registrationRepository.countByEventIdAndStatusIn(any(UUID.class), anyCollection()))
+                    .thenReturn(0L);
 
             var result = eventService.list(request);
 
-            assertThat(result)
-                    .isNotNull()
-                    .hasFieldOrPropertyWithValue("total", 2L);
-
             assertThat(result.events())
-                    .hasSize(2)
-                    .containsExactly(event1, event2);
+                    .hasSize(1)
+                    .extracting("title")
+                    .containsExactly("Limpeza do Parque");
 
-            assertThat(result.events().get(0).getImage()).containsExactly(1, 2, 3);
+            assertThat(result.total()).isEqualTo(1L);
+        }
+
+        @Test
+        void shouldIncludeEventsEndingExactlyNow() {
+            var now = LocalDateTime.now();
+            var event = buildEvent(
+                    UUID.randomUUID(), "Evento no limite", EventCategory.OTHER,
+                    now.minusHours(2), now.plusSeconds(5)
+            );
+
+            when(eventRepository.findAll()).thenReturn(List.of(event));
+            when(registrationRepository.countByEventIdAndStatusIn(any(UUID.class), anyCollection()))
+                    .thenReturn(0L);
+
+            var result = eventService.list(new EventListRequest());
+
+            assertThat(result.events()).hasSize(1);
         }
 
         @Test
@@ -238,7 +259,6 @@ class EventServiceImplTest {
             var request = new EventListRequest();
 
             when(eventRepository.findAll()).thenReturn(List.of());
-            when(eventRepository.count()).thenReturn(0L);
 
             var result = eventService.list(request);
 
@@ -250,17 +270,78 @@ class EventServiceImplTest {
         }
 
         @Test
-        void shouldReturnCorrectPaginationValues() {
-            var request = new EventListRequest();
+        void shouldReturnEmptyListWhenAllEventsHaveEnded() {
+            var now = LocalDateTime.now();
+            var pastEvent = buildEvent(
+                    UUID.randomUUID(), "Evento Encerrado", EventCategory.SOCIAL,
+                    now.minusDays(10), now.minusDays(9)
+            );
 
-            when(eventRepository.findAll()).thenReturn(List.of());
-            when(eventRepository.count()).thenReturn(25L);
+            when(eventRepository.findAll()).thenReturn(List.of(pastEvent));
 
-            var result = eventService.list(request);
+            var result = eventService.list(new EventListRequest());
 
-            assertThat(result)
-                    .isNotNull()
-                    .hasFieldOrPropertyWithValue("total", 25L);
+            assertThat(result.total()).isEqualTo(0L);
+            assertThat(result.events()).isEmpty();
+        }
+
+        @Test
+        void shouldExposeLiveEnrolledCountPerEvent() {
+            var now = LocalDateTime.now();
+            var event = buildEvent(
+                    UUID.randomUUID(), "Mutirão", EventCategory.SOCIAL,
+                    now.plusDays(1), now.plusDays(1).plusHours(3)
+            );
+
+            when(eventRepository.findAll()).thenReturn(List.of(event));
+            when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
+                    .thenReturn(7L);
+
+            var result = eventService.list(new EventListRequest());
+
+            assertThat(result.events()).hasSize(1);
+            assertThat(result.events().get(0).enrolledCount()).isEqualTo(7L);
+        }
+    }
+
+    @Nested
+    class ToEventResponseTest {
+        @Test
+        void shouldMapEventFieldsAndOwnerIdCorrectly() {
+            var now = LocalDateTime.now();
+            var event = buildEvent(
+                    UUID.randomUUID(), "Doação de Alimentos", EventCategory.SOCIAL,
+                    now, now.plusHours(2)
+            );
+
+            when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
+                    .thenReturn(3L);
+
+            var response = eventService.toEventResponse(event);
+
+            assertThat(response.id()).isEqualTo(event.getId());
+            assertThat(response.ownerId()).isEqualTo(event.getOwner().getId());
+            assertThat(response.title()).isEqualTo("Doação de Alimentos");
+            assertThat(response.category()).isEqualTo(EventCategory.SOCIAL);
+            assertThat(response.enrolledCount()).isEqualTo(3L);
+            assertThat(response.imageUrl()).isNull();
+        }
+
+        @Test
+        void shouldEncodeImageAsBase64DataUriWhenPresent() {
+            var now = LocalDateTime.now();
+            var event = buildEvent(
+                    UUID.randomUUID(), "Evento com imagem", EventCategory.OTHER,
+                    now, now.plusHours(1)
+            );
+            event.setImage(new byte[]{1, 2, 3});
+
+            when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
+                    .thenReturn(0L);
+
+            var response = eventService.toEventResponse(event);
+
+            assertThat(response.imageUrl()).startsWith("data:image/*;base64,");
         }
     }
 
@@ -317,6 +398,25 @@ class EventServiceImplTest {
 
             assertThat(result).isNull();
         }
+    }
+
+    private Event buildEvent(UUID id, String title, EventCategory category, LocalDateTime startsAt, LocalDateTime endsAt) {
+        var owner = new User();
+        owner.setId(UUID.randomUUID());
+
+        var address = new Address();
+        address.setId(UUID.randomUUID());
+
+        var event = new Event();
+        event.setId(id);
+        event.setTitle(title);
+        event.setCategory(category);
+        event.setOwner(owner);
+        event.setAddress(address);
+        event.setStartsAt(startsAt);
+        event.setEndsAt(endsAt);
+        event.setCapacity(50);
+        return event;
     }
 }
 
