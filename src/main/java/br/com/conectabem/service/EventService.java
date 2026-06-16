@@ -20,15 +20,9 @@ public interface EventService {
 
     boolean removeImageByEventId(String eventId);
 
-    /** Returns the raw entity (used internally / by authenticated event owner endpoints). */
     Event findById(String eventId);
 
-    /**
-     * Returns the public list of events, excluding finished ones,
-     * with live enrolledCount per event.
-     */
     EventListResponse list(EventListRequest eventListRequest);
 
-    /** Converts a single Event entity to its public DTO (with live enrolledCount). */
     EventResponse toEventResponse(Event event);
 }

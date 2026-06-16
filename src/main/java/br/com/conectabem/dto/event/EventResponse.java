@@ -17,5 +17,5 @@ public record EventResponse(
         LocalDateTime endsAt,
         Integer capacity,
         long enrolledCount,
-        String imageUrl   // base64 data-URI, or null
+        String imageUrl
 ) {}
