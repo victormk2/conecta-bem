@@ -12,7 +12,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "event_registrations")
+@Table(
+        name = "event_registrations",
+        uniqueConstraints = @UniqueConstraint(name = "ux_event_registrations_event_volunteer", columnNames = {"event", "volunteer"})
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
