@@ -56,6 +56,12 @@ public class User {
     @Column(length = 255)
     private String linkedin;
 
+    @Column(name = "temporary_password", length = 255)
+    private String temporaryPassword;
+
+    @Column(name = "temporary_password_expires_at")
+    private Instant temporaryPasswordExpiresAt;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = Instant.now();

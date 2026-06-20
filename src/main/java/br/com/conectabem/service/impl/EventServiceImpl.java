@@ -3,10 +3,13 @@ package br.com.conectabem.service.impl;
 import br.com.conectabem.dto.event.EventCreationDTO;
 import br.com.conectabem.dto.event.EventListRequest;
 import br.com.conectabem.dto.event.EventListResponse;
+import br.com.conectabem.dto.event.EventResponse;
 import br.com.conectabem.dto.event.EventUpdateDTO;
 import br.com.conectabem.infra.util.Mapper;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventCategory;
+import br.com.conectabem.model.ParticipationStatus;
+import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.service.AddressService;
 import br.com.conectabem.service.CurrentUserService;
@@ -19,13 +22,20 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class EventServiceImpl implements EventService {
 
+    private static final Set<ParticipationStatus> ACTIVE_STATUSES =
+            Set.of(ParticipationStatus.PENDING, ParticipationStatus.CONFIRMED);
+
     private final EventRepository eventRepository;
+    private final EventRegistrationRepository registrationRepository;
     private final Mapper<EventCreationDTO, Event> creationToEntity;
     private final UserService userService;
     private final AddressService addressService;
@@ -67,15 +77,13 @@ public class EventServiceImpl implements EventService {
             event.setUpdatedAt(LocalDateTime.now());
             event.setCapacity(eventUpdateDTO.capacity());
 
-            if (!event.getAddress().getId().equals(UUID.fromString(eventUpdateDTO.addressId()))){
+            if (!event.getAddress().getId().equals(UUID.fromString(eventUpdateDTO.addressId()))) {
                 event.setAddress(addressService.findById(UUID.fromString(eventUpdateDTO.addressId())));
             }
 
             applyImageIfPresent(event, image);
-
             return eventRepository.save(event);
         }
-
         return null;
     }
 
@@ -83,14 +91,10 @@ public class EventServiceImpl implements EventService {
     @Transactional
     public boolean removeImageByEventId(String eventId) {
         var eventOptional = eventRepository.findById(UUID.fromString(eventId));
-        if (eventOptional.isEmpty()) {
-            return false;
-        }
+        if (eventOptional.isEmpty()) return false;
 
         var event = eventOptional.get();
-        if (event.getImage() == null) {
-            return true;
-        }
+        if (event.getImage() == null) return true;
 
         event.setImage(null);
         eventRepository.save(event);
@@ -103,15 +107,47 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public EventListResponse list(EventListRequest eventListRequest) {
-        // Alterar para um chamada com limit por page e offset e adicionar chamada separada para count total
-        return new EventListResponse(eventRepository.findAll(), eventRepository.count());
+        LocalDateTime now = LocalDateTime.now();
+
+        List<EventResponse> events = eventRepository.findAll()
+                .stream()
+                .filter(e -> e.getEndsAt() == null || !e.getEndsAt().isBefore(now))
+                .map(this::toEventResponse)
+                .toList();
+
+        return new EventListResponse(events, (long) events.size());
+    }
+
+    @Override
+    public EventResponse toEventResponse(Event event) {
+        long activeCount = registrationRepository
+                .countByEventIdAndStatusIn(event.getId(), ACTIVE_STATUSES);
+
+        String imageUrl = null;
+        if (event.getImage() != null) {
+            imageUrl = "data:image/*;base64," +
+                    Base64.getEncoder().encodeToString(event.getImage());
+        }
+
+        return new EventResponse(
+                event.getId(),
+                event.getOwner().getId(),
+                event.getTitle(),
+                event.getDescription(),
+                event.getAddress(),
+                event.getCategory(),
+                event.getStartsAt(),
+                event.getEndsAt(),
+                event.getCapacity(),
+                activeCount,
+                imageUrl
+        );
     }
 
     private void applyImageIfPresent(Event event, MultipartFile image) {
-        if (image == null || image.isEmpty()) {
-            return;
-        }
+        if (image == null || image.isEmpty()) return;
 
         if (image.getContentType() == null || !image.getContentType().startsWith("image/")) {
             throw new IllegalArgumentException("Uploaded file must be an image.");

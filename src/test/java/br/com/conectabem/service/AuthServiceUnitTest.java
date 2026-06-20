@@ -14,13 +14,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceUnitTest {
@@ -120,6 +119,23 @@ class AuthServiceUnitTest {
         when(passwordEncoder.matches("wrong", "HASH")).thenReturn(false);
 
         assertThrows(RuntimeException.class, () -> authService.login(new LoginRequest("u@e.com", "wrong")));
+    }
+
+    @Test
+    void loginThrowsWhenTemporaryPasswordIsUsed() {
+        User user = new User();
+        user.setUsername("u");
+        user.setEmail("u@e.com");
+        user.setPassword("MAIN_HASH");
+        user.setTemporaryPassword("TEMP_HASH");
+        user.setTemporaryPasswordExpiresAt(Instant.now().plusSeconds(300));
+
+        when(userRepository.findByEmail("u@e.com")).thenReturn(Optional.of(user));
+        // senha temporária não bate com o campo password (principal)
+        when(passwordEncoder.matches("temp-raw", "MAIN_HASH")).thenReturn(false);
+
+        assertThrows(RuntimeException.class,
+                () -> authService.login(new LoginRequest("u@e.com", "temp-raw")));
     }
 
     @Test

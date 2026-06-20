@@ -1,63 +1,68 @@
 package br.com.conectabem.controller;
 
-import br.com.conectabem.dto.eventregistration.EventRegistrationCreateRequest;
+import br.com.conectabem.dto.event.EnrollmentStatusDTO;
+import br.com.conectabem.dto.event.ParticipantDTO;
 import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
 import br.com.conectabem.dto.eventregistration.EventRegistrationResponse;
 import br.com.conectabem.service.EventRegistrationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
-@RequestMapping("/event-registrations")
 @RequiredArgsConstructor
 public class EventRegistrationController {
 
-    private final EventRegistrationService eventRegistrationService;
+    private final EventRegistrationService registrationService;
 
-    @PostMapping
-    public ResponseEntity<EventRegistrationResponse> register(@RequestBody EventRegistrationCreateRequest request) {
-        var response = eventRegistrationService.register(request.eventId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    @PostMapping("/events/{id}/enroll")
+    public ResponseEntity<Void> enroll(@PathVariable UUID id) {
+        registrationService.enroll(id);
+        return ResponseEntity.ok().build();
     }
 
-    @PatchMapping("/{id}/confirm")
-    public EventRegistrationResponse confirm(@PathVariable String id) {
-        return eventRegistrationService.confirm(id);
+    @DeleteMapping("/events/{id}/enroll")
+    public ResponseEntity<Void> cancel(@PathVariable UUID id) {
+        registrationService.cancel(id);
+        return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/{id}/reject")
+    @GetMapping("/events/{id}/enrollment/status")
+    public ResponseEntity<EnrollmentStatusDTO> enrollmentStatus(@PathVariable UUID id) {
+        return ResponseEntity.ok(registrationService.getEnrollmentStatus(id));
+    }
+
+    @GetMapping("/events/{id}/enrollments")
+    public ResponseEntity<List<ParticipantDTO>> participants(@PathVariable UUID id) {
+        return ResponseEntity.ok(registrationService.getParticipants(id));
+    }
+
+    @PatchMapping("/event-registrations/{id}/confirm")
+    public EventRegistrationResponse confirm(@PathVariable UUID id) {
+        return registrationService.confirm(id);
+    }
+
+    @PatchMapping("/event-registrations/{id}/reject")
     public EventRegistrationResponse reject(
-            @PathVariable String id,
+            @PathVariable UUID id,
             @RequestBody(required = false) EventRegistrationDecisionRequest request
     ) {
-        return eventRegistrationService.reject(id, request);
+        return registrationService.reject(id, request);
     }
 
-    @PatchMapping("/{id}/dismiss")
+    @PatchMapping("/event-registrations/{id}/dismiss")
     public EventRegistrationResponse dismiss(
-            @PathVariable String id,
+            @PathVariable UUID id,
             @RequestBody(required = false) EventRegistrationDecisionRequest request
     ) {
-        return eventRegistrationService.dismiss(id, request);
+        return registrationService.dismiss(id, request);
     }
 
-    @GetMapping("/events/{eventId}")
-    public List<EventRegistrationResponse> listByEvent(@PathVariable String eventId) {
-        return eventRegistrationService.listByEvent(eventId);
-    }
-
-    @GetMapping("/me")
-    public List<EventRegistrationResponse> listCurrentUserRegistrations() {
-        return eventRegistrationService.listCurrentUserRegistrations();
+    @GetMapping("/event-registrations/events/{eventId}")
+    public List<EventRegistrationResponse> listByEvent(@PathVariable UUID eventId) {
+        return registrationService.listByEvent(eventId);
     }
 }

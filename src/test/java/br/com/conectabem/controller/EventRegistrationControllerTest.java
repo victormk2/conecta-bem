@@ -1,8 +1,10 @@
 package br.com.conectabem.controller;
 
-import br.com.conectabem.dto.eventregistration.EventRegistrationCreateRequest;
+import br.com.conectabem.dto.event.EnrollmentStatusDTO;
+import br.com.conectabem.dto.event.ParticipantDTO;
 import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
 import br.com.conectabem.dto.eventregistration.EventRegistrationResponse;
+import br.com.conectabem.model.Gender;
 import br.com.conectabem.service.EventRegistrationService;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Nested;
@@ -13,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatusCode;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,21 +29,73 @@ class EventRegistrationControllerTest {
     private EventRegistrationController controller;
 
     @Mock
-    private EventRegistrationService service;
+    private EventRegistrationService registrationService;
 
     @Nested
-    class RegisterTest {
+    class EnrollTest {
         @Test
-        void shouldCallServiceAndReturnCreated() {
-            var request = new EventRegistrationCreateRequest("00000000-0000-0000-0000-000000000001");
-            var responseBody = response("PENDING");
-            when(service.register(request.eventId())).thenReturn(responseBody);
+        void shouldCallServiceAndReturnOk() {
+            var eventId = UUID.randomUUID();
 
-            var response = controller.register(request);
+            var response = controller.enroll(eventId);
 
-            verify(service).register(request.eventId());
-            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(201));
-            Assertions.assertThat(response.getBody()).isEqualTo(responseBody);
+            verify(registrationService).enroll(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
+        }
+    }
+
+    @Nested
+    class CancelTest {
+        @Test
+        void shouldCallServiceAndReturnNoContent() {
+            var eventId = UUID.randomUUID();
+
+            var response = controller.cancel(eventId);
+
+            verify(registrationService).cancel(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(204));
+        }
+    }
+
+    @Nested
+    class EnrollmentStatusTest {
+        @Test
+        void shouldReturnEnrollmentStatusFromService() {
+            var eventId = UUID.randomUUID();
+            var status = new EnrollmentStatusDTO(true);
+
+            when(registrationService.getEnrollmentStatus(eventId)).thenReturn(status);
+
+            var response = controller.enrollmentStatus(eventId);
+
+            verify(registrationService).getEnrollmentStatus(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
+            Assertions.assertThat(response.getBody()).isEqualTo(status);
+        }
+    }
+
+    @Nested
+    class ParticipantsTest {
+        @Test
+        void shouldReturnParticipantListFromService() {
+            var eventId = UUID.randomUUID();
+            var participant = new ParticipantDTO(
+                    UUID.randomUUID(),
+                    "Maria Souza",
+                    "maria@email.com",
+                    "12345678901",
+                    LocalDate.of(1995, 5, 20),
+                    "47999990000",
+                    Gender.FEMALE
+            );
+
+            when(registrationService.getParticipants(eventId)).thenReturn(List.of(participant));
+
+            var response = controller.participants(eventId);
+
+            verify(registrationService).getParticipants(eventId);
+            Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
+            Assertions.assertThat(response.getBody()).containsExactly(participant);
         }
     }
 
@@ -48,25 +103,27 @@ class EventRegistrationControllerTest {
     class DecisionTest {
         @Test
         void shouldCallReject() {
+            var registrationId = UUID.randomUUID();
             var request = new EventRegistrationDecisionRequest("Sem vaga");
             var response = response("REJECTED");
-            when(service.reject("registration-id", request)).thenReturn(response);
+            when(registrationService.reject(registrationId, request)).thenReturn(response);
 
-            var result = controller.reject("registration-id", request);
+            var result = controller.reject(registrationId, request);
 
-            verify(service).reject("registration-id", request);
+            verify(registrationService).reject(registrationId, request);
             Assertions.assertThat(result).isEqualTo(response);
         }
 
         @Test
         void shouldCallDismiss() {
+            var registrationId = UUID.randomUUID();
             var request = new EventRegistrationDecisionRequest("Equipe completa");
             var response = response("DISMISSED");
-            when(service.dismiss("registration-id", request)).thenReturn(response);
+            when(registrationService.dismiss(registrationId, request)).thenReturn(response);
 
-            var result = controller.dismiss("registration-id", request);
+            var result = controller.dismiss(registrationId, request);
 
-            verify(service).dismiss("registration-id", request);
+            verify(registrationService).dismiss(registrationId, request);
             Assertions.assertThat(result).isEqualTo(response);
         }
     }
@@ -75,12 +132,13 @@ class EventRegistrationControllerTest {
     class ListTest {
         @Test
         void shouldCallListByEvent() {
+            var eventId = UUID.randomUUID();
             var registrations = List.of(response("PENDING"));
-            when(service.listByEvent("event-id")).thenReturn(registrations);
+            when(registrationService.listByEvent(eventId)).thenReturn(registrations);
 
-            var result = controller.listByEvent("event-id");
+            var result = controller.listByEvent(eventId);
 
-            verify(service).listByEvent("event-id");
+            verify(registrationService).listByEvent(eventId);
             Assertions.assertThat(result).isEqualTo(registrations);
         }
     }
