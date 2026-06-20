@@ -50,7 +50,7 @@ class UserControllerTest {
 
             assertThat(response.fullName()).isEqualTo("João Silva");
             assertThat(response.email()).isEqualTo("joao@gmail.com");
-            assertThat(response.cpfOrCnpj()).isEqualTo("12345678901");
+            assertThat(response.cpfCnpj()).isEqualTo("12345678901");
             assertThat(response.birthDate()).isEqualTo("2000-01-15");
             assertThat(response.phone()).isEqualTo("47999990000");
             assertThat(response.instagram()).isEqualTo("joao123");
@@ -65,7 +65,7 @@ class UserControllerTest {
         void shouldCallServiceAndReturnNoContent() {
             var userId = UUID.randomUUID();
             var request = new UpdateProfileRequest(
-                    "joao@gmail.com", Gender.MALE, "47911110000", "joao123", "https://linkedin.com/in/joao123"
+                    "joao@gmail.com", null, Gender.MALE, "47911110000", "joao123", "https://linkedin.com/in/joao123"
             );
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -80,7 +80,7 @@ class UserControllerTest {
         @Test
         void shouldPassCorrectUserIdToService() {
             var userId = UUID.randomUUID();
-            var request = new UpdateProfileRequest(null, null, null, "joao123", null);
+            var request = new UpdateProfileRequest(null, null, null, null, "joao123", null);
 
             when(currentUserService.requireUserId()).thenReturn(userId);
 

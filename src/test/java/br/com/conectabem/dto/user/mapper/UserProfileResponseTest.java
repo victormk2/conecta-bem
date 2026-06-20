@@ -25,7 +25,7 @@ class UserProfileResponseTest {
 
             assertThat(response.fullName()).isEqualTo("Joao Silva");
             assertThat(response.email()).isEqualTo("joao@gmail.com");
-            assertThat(response.cpfOrCnpj()).isEqualTo("98765432100");
+            assertThat(response.cpfCnpj()).isEqualTo("98765432100");
             assertThat(response.birthDate()).isEqualTo("2000-01-01");
             assertThat(response.gender()).isEqualTo("OTHER");
             assertThat(response.phone()).isEqualTo("47988880000");
@@ -54,7 +54,7 @@ class UserProfileResponseTest {
 
             var response = UserProfileResponse.from(user);
 
-            assertThat(response.cpfOrCnpj()).isNull();
+            assertThat(response.cpfCnpj()).isNull();
             assertThat(response.gender()).isNull();
             assertThat(response.phone()).isNull();
             assertThat(response.instagram()).isNull();

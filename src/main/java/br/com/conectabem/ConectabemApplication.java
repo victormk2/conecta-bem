@@ -9,5 +9,4 @@ public class ConectabemApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(ConectabemApplication.class, args);
 	}
-
 }
