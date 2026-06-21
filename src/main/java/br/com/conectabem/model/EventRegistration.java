@@ -5,14 +5,12 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "event_registrations")
+@Table(name = "event_registrations", uniqueConstraints = @UniqueConstraint(name = "uq_event_registrations_event_volunteer", columnNames = {"event", "volunteer"}))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

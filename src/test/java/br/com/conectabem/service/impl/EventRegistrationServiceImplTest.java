@@ -53,7 +53,7 @@ class EventRegistrationServiceImplTest {
     class EnrollTest {
 
         @Test
-        void shouldEnrollSuccessfully() {
+        void shouldCreateNewRegistrationWhenNoneExists() {
             var userId = UUID.randomUUID();
             var ownerId = UUID.randomUUID();
             var now = LocalDateTime.now();
@@ -63,11 +63,11 @@ class EventRegistrationServiceImplTest {
 
             when(currentUserService.requireUserId()).thenReturn(userId);
             when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(userService.findById(userId)).thenReturn(user);
             when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
                     .thenReturn(Optional.empty());
             when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
                     .thenReturn(0L);
+            when(userService.findById(userId)).thenReturn(user);
 
             registrationService.enroll(event.getId());
 
@@ -78,6 +78,37 @@ class EventRegistrationServiceImplTest {
             assertThat(saved.getEvent()).isEqualTo(event);
             assertThat(saved.getVolunteer()).isEqualTo(user);
             assertThat(saved.getStatus()).isEqualTo(ParticipationStatus.REGISTERED);
+        }
+
+        @Test
+        void shouldReactivateExistingRowWhenReEnrollingAfterCancellation() {
+            var userId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+
+            var canceledRegistration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .status(ParticipationStatus.CANCELED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(canceledRegistration));
+            when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
+                    .thenReturn(0L);
+
+            registrationService.enroll(event.getId());
+
+            var captor = ArgumentCaptor.forClass(EventRegistration.class);
+            verify(registrationRepository).save(captor.capture());
+
+            assertThat(captor.getValue().getId()).isEqualTo(canceledRegistration.getId());
+            assertThat(captor.getValue().getStatus()).isEqualTo(ParticipationStatus.REGISTERED);
+
+            verify(userService, never()).findById(any());
         }
 
         @Test
@@ -157,34 +188,6 @@ class EventRegistrationServiceImplTest {
                     .hasMessageContaining("já está inscrito");
 
             verify(registrationRepository, never()).save(any());
-        }
-
-        @Test
-        void shouldAllowReEnrollingAfterPreviousCancellation() {
-            var userId = UUID.randomUUID();
-            var ownerId = UUID.randomUUID();
-            var now = LocalDateTime.now();
-            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
-            var user = new User();
-            user.setId(userId);
-
-            var canceledRegistration = EventRegistration.builder()
-                    .id(UUID.randomUUID())
-                    .event(event)
-                    .status(ParticipationStatus.CANCELED)
-                    .build();
-
-            when(currentUserService.requireUserId()).thenReturn(userId);
-            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(userService.findById(userId)).thenReturn(user);
-            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
-                    .thenReturn(Optional.of(canceledRegistration));
-            when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
-                    .thenReturn(0L);
-
-            registrationService.enroll(event.getId());
-
-            verify(registrationRepository).save(any(EventRegistration.class));
         }
 
         @Test
