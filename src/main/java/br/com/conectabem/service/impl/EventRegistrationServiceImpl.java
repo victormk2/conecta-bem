@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
@@ -41,11 +42,9 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     public void enroll(UUID eventId) {
         UUID userId = currentUserService.requireUserId();
         Event event = requireEvent(eventId);
-        User user   = userService.findById(userId);
 
         if (event.getOwner().getId().equals(userId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN, "O dono do evento não pode se inscrever nele.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "O dono do evento não pode se inscrever nele.");
         }
 
         if (LocalDateTime.now().isAfter(event.getEndsAt())) {
@@ -53,14 +52,12 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                     HttpStatus.UNPROCESSABLE_ENTITY, "Este evento já foi encerrado.");
         }
 
-        registrationRepository
-                .findByEventIdAndVolunteerId(eventId, userId)
-                .ifPresent(existing -> {
-                    if (ACTIVE_STATUSES.contains(existing.getStatus())) {
-                        throw new ResponseStatusException(
-                                HttpStatus.CONFLICT, "Você já está inscrito neste evento.");
-                    }
-                });
+        var existing = registrationRepository.findByEventIdAndVolunteerId(eventId, userId);
+
+        if (existing.isPresent() && ACTIVE_STATUSES.contains(existing.get().getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Você já está inscrito neste evento.");
+        }
 
         long activeCount = registrationRepository
                 .countByEventIdAndStatusIn(eventId, ACTIVE_STATUSES);
@@ -69,11 +66,14 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                     HttpStatus.UNPROCESSABLE_ENTITY, "O evento já atingiu o número máximo de voluntários.");
         }
 
-        EventRegistration registration = EventRegistration.builder()
+        EventRegistration registration = existing.orElseGet(() -> EventRegistration.builder()
                 .event(event)
-                .volunteer(user)
-                .status(ParticipationStatus.REGISTERED)
-                .build();
+                .volunteer(userService.findById(userId))
+                .build());
+
+        registration.setStatus(ParticipationStatus.REGISTERED);
+        registration.setStatusUpdatedAt(Instant.now());
+        registration.setJustification(null);
 
         registrationRepository.save(registration);
     }
@@ -85,9 +85,7 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
         Event event = requireEvent(eventId);
 
         if (LocalDateTime.now().isAfter(event.getStartsAt())) {
-            throw new ResponseStatusException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "Não é possível cancelar a inscrição após o início do evento.");
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Não é possível cancelar a inscrição após o início do evento.");
         }
 
         EventRegistration registration = registrationRepository
@@ -101,6 +99,7 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
         }
 
         registration.setStatus(ParticipationStatus.CANCELED);
+        registration.setStatusUpdatedAt(Instant.now());
         registrationRepository.save(registration);
     }
 
