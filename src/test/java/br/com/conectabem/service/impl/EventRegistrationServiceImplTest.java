@@ -56,7 +56,7 @@ class EventRegistrationServiceImplTest {
     class EnrollTest {
 
         @Test
-        void shouldCreatePendingRegistrationSuccessfully() {
+        void shouldCreateNewRegistrationWhenNoneExists() {
             var userId = UUID.randomUUID();
             var ownerId = UUID.randomUUID();
             var now = LocalDateTime.now();
@@ -65,11 +65,11 @@ class EventRegistrationServiceImplTest {
 
             when(currentUserService.requireUserId()).thenReturn(userId);
             when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(userService.findById(userId)).thenReturn(user);
             when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
                     .thenReturn(Optional.empty());
             when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
                     .thenReturn(0L);
+            when(userService.findById(userId)).thenReturn(user);
 
             registrationService.enroll(event.getId());
 
@@ -79,8 +79,41 @@ class EventRegistrationServiceImplTest {
             var saved = captor.getValue();
             assertThat(saved.getEvent()).isEqualTo(event);
             assertThat(saved.getVolunteer()).isEqualTo(user);
-            assertThat(saved.getStatus()).isEqualTo(ParticipationStatus.PENDING);
+            assertThat(saved.getStatus()).isEqualTo(ParticipationStatus.REGISTERED);
             assertThat(saved.getStatusUpdatedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldReactivateExistingRowWhenReEnrollingAfterCancellation() {
+            var userId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+
+            var canceledRegistration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .status(ParticipationStatus.CANCELED)
+                    .justification("Cancelado anteriormente")
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(canceledRegistration));
+            when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
+                    .thenReturn(0L);
+
+            registrationService.enroll(event.getId());
+
+            var captor = ArgumentCaptor.forClass(EventRegistration.class);
+            verify(registrationRepository).save(captor.capture());
+
+            assertThat(captor.getValue().getId()).isEqualTo(canceledRegistration.getId());
+            assertThat(captor.getValue().getStatus()).isEqualTo(ParticipationStatus.REGISTERED);
+            assertThat(captor.getValue().getJustification()).isNull();
+
+            verify(userService, never()).findById(any());
         }
 
         @Test
@@ -91,7 +124,6 @@ class EventRegistrationServiceImplTest {
 
             when(currentUserService.requireUserId()).thenReturn(ownerId);
             when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(userService.findById(ownerId)).thenReturn(user(ownerId));
 
             assertThatThrownBy(() -> registrationService.enroll(event.getId()))
                     .isInstanceOf(ResponseStatusException.class)
@@ -109,7 +141,6 @@ class EventRegistrationServiceImplTest {
 
             when(currentUserService.requireUserId()).thenReturn(userId);
             when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(userService.findById(userId)).thenReturn(user(userId));
             when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
                     .thenReturn(Optional.empty());
             when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), anyCollection()))
@@ -132,18 +163,32 @@ class EventRegistrationServiceImplTest {
             var existingRegistration = EventRegistration.builder()
                     .id(UUID.randomUUID())
                     .event(event)
-                    .status(ParticipationStatus.PENDING)
+                    .status(ParticipationStatus.REGISTERED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
             when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(userService.findById(userId)).thenReturn(user(userId));
             when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
                     .thenReturn(Optional.of(existingRegistration));
 
             assertThatThrownBy(() -> registrationService.enroll(event.getId()))
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("já está inscrito");
+
+            verify(registrationRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenEventDoesNotExist() {
+            var userId = UUID.randomUUID();
+            var eventId = UUID.randomUUID();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> registrationService.enroll(eventId))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("não encontrado");
 
             verify(registrationRepository, never()).save(any());
         }
@@ -162,7 +207,7 @@ class EventRegistrationServiceImplTest {
             var registration = EventRegistration.builder()
                     .id(UUID.randomUUID())
                     .event(event)
-                    .status(ParticipationStatus.PENDING)
+                    .status(ParticipationStatus.REGISTERED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -172,7 +217,7 @@ class EventRegistrationServiceImplTest {
 
             registrationService.cancel(event.getId());
 
-            assertThat(registration.getStatus()).isEqualTo(ParticipationStatus.CANCELLED);
+            assertThat(registration.getStatus()).isEqualTo(ParticipationStatus.CANCELED);
             assertThat(registration.getStatusUpdatedAt()).isNotNull();
             verify(registrationRepository).save(registration);
         }
@@ -182,13 +227,13 @@ class EventRegistrationServiceImplTest {
     class EnrollmentStatusTest {
 
         @Test
-        void shouldReturnTrueWhenUserHasPendingRegistration() {
+        void shouldReturnTrueWhenUserHasRegisteredRegistration() {
             var userId = UUID.randomUUID();
             var eventId = UUID.randomUUID();
 
             var registration = EventRegistration.builder()
                     .id(UUID.randomUUID())
-                    .status(ParticipationStatus.PENDING)
+                    .status(ParticipationStatus.REGISTERED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -207,7 +252,7 @@ class EventRegistrationServiceImplTest {
 
             var registration = EventRegistration.builder()
                     .id(UUID.randomUUID())
-                    .status(ParticipationStatus.CANCELLED)
+                    .status(ParticipationStatus.CANCELED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -232,7 +277,7 @@ class EventRegistrationServiceImplTest {
                     .id(UUID.randomUUID())
                     .event(event)
                     .volunteer(user(userId))
-                    .status(ParticipationStatus.CONFIRMED)
+                    .status(ParticipationStatus.REGISTERED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -287,7 +332,7 @@ class EventRegistrationServiceImplTest {
                     .id(UUID.randomUUID())
                     .event(event)
                     .volunteer(user(userId))
-                    .status(ParticipationStatus.CANCELLED)
+                    .status(ParticipationStatus.CANCELED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -306,9 +351,9 @@ class EventRegistrationServiceImplTest {
     @Nested
     class DecisionTest {
         @Test
-        void shouldConfirmPendingRegistrationWhenCurrentUserOwnsEvent() {
+        void shouldConfirmRegisteredRegistrationWhenCurrentUserOwnsEvent() {
             var ownerId = UUID.randomUUID();
-            var registration = registration(ParticipationStatus.PENDING, ownerId);
+            var registration = registration(ParticipationStatus.REGISTERED, ownerId);
 
             when(currentUserService.requireUserId()).thenReturn(ownerId);
             when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
@@ -322,9 +367,9 @@ class EventRegistrationServiceImplTest {
         }
 
         @Test
-        void shouldRejectPendingRegistrationWhenCurrentUserOwnsEvent() {
+        void shouldRejectRegisteredRegistrationWhenCurrentUserOwnsEvent() {
             var ownerId = UUID.randomUUID();
-            var registration = registration(ParticipationStatus.PENDING, ownerId);
+            var registration = registration(ParticipationStatus.REGISTERED, ownerId);
             var request = new EventRegistrationDecisionRequest("Não atende ao perfil da ação");
 
             when(currentUserService.requireUserId()).thenReturn(ownerId);
@@ -489,14 +534,14 @@ class EventRegistrationServiceImplTest {
                     .id(UUID.randomUUID())
                     .event(event)
                     .volunteer(volunteer)
-                    .status(ParticipationStatus.PENDING)
+                    .status(ParticipationStatus.REGISTERED)
                     .build();
 
             var cancelledRegistration = EventRegistration.builder()
                     .id(UUID.randomUUID())
                     .event(event)
                     .volunteer(new User())
-                    .status(ParticipationStatus.CANCELLED)
+                    .status(ParticipationStatus.CANCELED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(ownerId);
@@ -527,13 +572,13 @@ class EventRegistrationServiceImplTest {
             var activeRegistration = EventRegistration.builder()
                     .id(UUID.randomUUID())
                     .event(activeEvent)
-                    .status(ParticipationStatus.PENDING)
+                    .status(ParticipationStatus.REGISTERED)
                     .build();
 
             var cancelledRegistration = EventRegistration.builder()
                     .id(UUID.randomUUID())
                     .event(cancelledEvent)
-                    .status(ParticipationStatus.CANCELLED)
+                    .status(ParticipationStatus.CANCELED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);

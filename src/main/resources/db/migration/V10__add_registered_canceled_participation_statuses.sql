@@ -1,0 +1,2 @@
+ALTER TYPE participation_status ADD VALUE IF NOT EXISTS 'REGISTERED';
+ALTER TYPE participation_status ADD VALUE IF NOT EXISTS 'CANCELED';

@@ -34,11 +34,14 @@ import java.util.UUID;
 public class EventRegistrationServiceImpl implements EventRegistrationService {
 
     private static final Set<ParticipationStatus> ACTIVE_STATUSES = Set.of(
+            ParticipationStatus.REGISTERED,
             ParticipationStatus.PENDING,
-            ParticipationStatus.CONFIRMED
+            ParticipationStatus.CONFIRMED,
+            ParticipationStatus.PRESENT
     );
 
     private static final Set<ParticipationStatus> FEEDBACK_STATUSES = Set.of(
+            ParticipationStatus.REGISTERED,
             ParticipationStatus.CONFIRMED,
             ParticipationStatus.PRESENT,
             ParticipationStatus.ABSENT,
@@ -55,14 +58,9 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     public void enroll(UUID eventId) {
         UUID userId = currentUserService.requireUserId();
         Event event = requireEvent(eventId);
-        User user = userService.findById(userId);
-        if (user == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado.");
-        }
 
         if (event.getOwner().getId().equals(userId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN, "O dono do evento não pode se inscrever nele.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "O dono do evento não pode se inscrever nele.");
         }
 
         if (event.getEndsAt() != null && LocalDateTime.now().isAfter(event.getEndsAt())) {
@@ -70,14 +68,12 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                     HttpStatus.UNPROCESSABLE_ENTITY, "Este evento já foi encerrado.");
         }
 
-        registrationRepository
-                .findByEventIdAndVolunteerId(eventId, userId)
-                .ifPresent(existing -> {
-                    if (ACTIVE_STATUSES.contains(existing.getStatus())) {
-                        throw new ResponseStatusException(
-                                HttpStatus.CONFLICT, "Você já está inscrito neste evento.");
-                    }
-                });
+        var existing = registrationRepository.findByEventIdAndVolunteerId(eventId, userId);
+
+        if (existing.isPresent() && ACTIVE_STATUSES.contains(existing.get().getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Você já está inscrito neste evento.");
+        }
 
         long activeCount = registrationRepository.countByEventIdAndStatusIn(eventId, ACTIVE_STATUSES);
         if (event.getCapacity() != null && activeCount >= event.getCapacity()) {
@@ -85,12 +81,14 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                     HttpStatus.UNPROCESSABLE_ENTITY, "O evento já atingiu o número máximo de voluntários.");
         }
 
-        EventRegistration registration = EventRegistration.builder()
+        EventRegistration registration = existing.orElseGet(() -> EventRegistration.builder()
                 .event(event)
-                .volunteer(user)
-                .status(ParticipationStatus.PENDING)
-                .statusUpdatedAt(Instant.now())
-                .build();
+                .volunteer(requireUser(userId))
+                .build());
+
+        registration.setStatus(ParticipationStatus.REGISTERED);
+        registration.setStatusUpdatedAt(Instant.now());
+        registration.setJustification(null);
 
         registrationRepository.save(registration);
     }
@@ -102,9 +100,7 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
         Event event = requireEvent(eventId);
 
         if (LocalDateTime.now().isAfter(event.getStartsAt())) {
-            throw new ResponseStatusException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "Não é possível cancelar a inscrição após o início do evento.");
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Não é possível cancelar a inscrição após o início do evento.");
         }
 
         EventRegistration registration = registrationRepository
@@ -117,7 +113,7 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                     HttpStatus.CONFLICT, "Esta inscrição já foi finalizada.");
         }
 
-        registration.setStatus(ParticipationStatus.CANCELLED);
+        registration.setStatus(ParticipationStatus.CANCELED);
         registration.setStatusUpdatedAt(Instant.now());
         registrationRepository.save(registration);
     }
@@ -206,7 +202,11 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     public EventRegistrationResponse confirm(UUID registrationId) {
         EventRegistration registration = requireRegistration(registrationId);
         ensureCurrentUserOwnsEvent(registration);
-        ensureStatus(registration, ParticipationStatus.PENDING, "Apenas inscrições pendentes podem ser confirmadas.");
+        ensureStatusIn(
+                registration,
+                Set.of(ParticipationStatus.REGISTERED, ParticipationStatus.PENDING),
+                "Apenas inscrições pendentes podem ser confirmadas."
+        );
 
         registration.setStatus(ParticipationStatus.CONFIRMED);
         registration.setStatusUpdatedAt(Instant.now());
@@ -218,7 +218,11 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     public EventRegistrationResponse reject(UUID registrationId, EventRegistrationDecisionRequest request) {
         EventRegistration registration = requireRegistration(registrationId);
         ensureCurrentUserOwnsEvent(registration);
-        ensureStatus(registration, ParticipationStatus.PENDING, "Apenas inscrições pendentes podem ser recusadas.");
+        ensureStatusIn(
+                registration,
+                Set.of(ParticipationStatus.REGISTERED, ParticipationStatus.PENDING),
+                "Apenas inscrições pendentes podem ser recusadas."
+        );
 
         registration.setStatus(ParticipationStatus.REJECTED);
         registration.setJustification(readJustification(request));
@@ -231,7 +235,11 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
     public EventRegistrationResponse dismiss(UUID registrationId, EventRegistrationDecisionRequest request) {
         EventRegistration registration = requireRegistration(registrationId);
         ensureCurrentUserOwnsEvent(registration);
-        ensureStatus(registration, ParticipationStatus.CONFIRMED, "Apenas inscrições confirmadas podem ser dispensadas.");
+        ensureStatusIn(
+                registration,
+                Set.of(ParticipationStatus.REGISTERED, ParticipationStatus.CONFIRMED),
+                "Apenas inscrições confirmadas podem ser dispensadas."
+        );
 
         registration.setStatus(ParticipationStatus.DISMISSED);
         registration.setJustification(readJustification(request));
@@ -284,6 +292,14 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                         HttpStatus.NOT_FOUND, "Inscrição não encontrada."));
     }
 
+    private User requireUser(UUID userId) {
+        User user = userService.findById(userId);
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado.");
+        }
+        return user;
+    }
+
     private void ensureCurrentUserOwnsEvent(EventRegistration registration) {
         ensureCurrentUserOwnsEvent(registration.getEvent());
     }
@@ -298,6 +314,12 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
 
     private void ensureStatus(EventRegistration registration, ParticipationStatus expected, String message) {
         if (registration.getStatus() != expected) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, message);
+        }
+    }
+
+    private void ensureStatusIn(EventRegistration registration, Set<ParticipationStatus> expected, String message) {
+        if (!expected.contains(registration.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, message);
         }
     }
