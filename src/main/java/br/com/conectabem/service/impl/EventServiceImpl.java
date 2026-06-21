@@ -8,7 +8,9 @@ import br.com.conectabem.dto.event.EventUpdateDTO;
 import br.com.conectabem.infra.util.Mapper;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventCategory;
+import br.com.conectabem.model.EventType;
 import br.com.conectabem.model.ParticipationStatus;
+import br.com.conectabem.model.User;
 import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
 import br.com.conectabem.service.AddressService;
@@ -32,7 +34,7 @@ import java.util.UUID;
 public class EventServiceImpl implements EventService {
 
     private static final Set<ParticipationStatus> ACTIVE_STATUSES =
-            Set.of(ParticipationStatus.REGISTERED, ParticipationStatus.PRESENT);
+            Set.of(ParticipationStatus.PENDING, ParticipationStatus.CONFIRMED);
 
     private final EventRepository eventRepository;
     private final EventRegistrationRepository registrationRepository;
@@ -51,7 +53,10 @@ public class EventServiceImpl implements EventService {
     @Transactional
     public Event createWithImage(EventCreationDTO eventCreationDTO, MultipartFile image) {
         var baseEntity = creationToEntity.map(eventCreationDTO);
-        baseEntity.setOwner(userService.findById(currentUserService.requireUserId()));
+        var owner = userService.findById(currentUserService.requireUserId());
+        validateOwnerProfileForEventCreation(owner);
+        validateEventTypeRequirements(baseEntity);
+        baseEntity.setOwner(owner);
         baseEntity.setAddress(addressService.findById(UUID.fromString(eventCreationDTO.addressId())));
         applyImageIfPresent(baseEntity, image);
         return eventRepository.save(baseEntity);
@@ -76,6 +81,8 @@ public class EventServiceImpl implements EventService {
             event.setEndsAt(LocalDateTime.parse(eventUpdateDTO.endsAt()));
             event.setUpdatedAt(LocalDateTime.now());
             event.setCapacity(eventUpdateDTO.capacity());
+            applyEventTypeUpdate(event, eventUpdateDTO);
+            validateEventTypeRequirements(event);
 
             if (!event.getAddress().getId().equals(UUID.fromString(eventUpdateDTO.addressId()))) {
                 event.setAddress(addressService.findById(UUID.fromString(eventUpdateDTO.addressId())));
@@ -142,7 +149,10 @@ public class EventServiceImpl implements EventService {
                 event.getEndsAt(),
                 event.getCapacity(),
                 activeCount,
-                imageUrl
+                imageUrl,
+                event.getType(),
+                event.getOrganizationName(),
+                event.getOrganizationDocument()
         );
     }
 
@@ -158,5 +168,61 @@ public class EventServiceImpl implements EventService {
         } catch (IOException e) {
             throw new IllegalArgumentException("Could not process uploaded image.");
         }
+    }
+
+    private void validateOwnerProfileForEventCreation(User owner) {
+        if (owner == null) {
+            throw new IllegalArgumentException("Authenticated user not found.");
+        }
+
+        if (isBlank(owner.getFullName()) || isBlank(owner.getEmail()) || isBlank(owner.getCpfCnpj()) || isBlank(owner.getPhone())) {
+            throw new IllegalArgumentException("Complete your profile before creating an event. Required fields: fullName, email, cpfCnpj, phone.");
+        }
+    }
+
+    private void validateEventTypeRequirements(Event event) {
+        if (event.getType() == null) {
+            event.setType(EventType.COMMUNITY);
+        }
+
+        if (event.getType() == EventType.ORGANIZATION &&
+                (isBlank(event.getOrganizationName()) || isBlank(event.getOrganizationDocument()))) {
+            throw new IllegalArgumentException("Organization events require organizationName and organizationDocument.");
+        }
+
+        if (event.getType() == EventType.COMMUNITY) {
+            event.setOrganizationName(null);
+            event.setOrganizationDocument(null);
+        }
+    }
+
+    private EventType parseEventType(String value) {
+        if (value == null || value.isBlank()) {
+            return EventType.COMMUNITY;
+        }
+        return EventType.valueOf(value);
+    }
+
+    private void applyEventTypeUpdate(Event event, EventUpdateDTO eventUpdateDTO) {
+        if (eventUpdateDTO.type() != null && !eventUpdateDTO.type().isBlank()) {
+            event.setType(parseEventType(eventUpdateDTO.type()));
+        }
+        if (eventUpdateDTO.organizationName() != null) {
+            event.setOrganizationName(trimToNull(eventUpdateDTO.organizationName()));
+        }
+        if (eventUpdateDTO.organizationDocument() != null) {
+            event.setOrganizationDocument(trimToNull(eventUpdateDTO.organizationDocument()));
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

@@ -1,0 +1,9 @@
+ALTER TABLE events
+    ADD COLUMN IF NOT EXISTS type VARCHAR(32) NOT NULL DEFAULT 'COMMUNITY',
+    ADD COLUMN IF NOT EXISTS organization_name VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS organization_document VARCHAR(14);
+
+ALTER TABLE event_registrations
+    ADD COLUMN IF NOT EXISTS organizer_feedback VARCHAR(3000),
+    ADD COLUMN IF NOT EXISTS feedback_rating INTEGER,
+    ADD COLUMN IF NOT EXISTS feedback_created_at TIMESTAMP;

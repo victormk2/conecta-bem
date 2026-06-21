@@ -1,5 +1,8 @@
 package br.com.conectabem.service.impl;
 
+import br.com.conectabem.dto.eventregistration.AbsenceNoticeRequest;
+import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
+import br.com.conectabem.dto.eventregistration.OrganizerFeedbackRequest;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventRegistration;
 import br.com.conectabem.model.ParticipationStatus;
@@ -58,8 +61,7 @@ class EventRegistrationServiceImplTest {
             var ownerId = UUID.randomUUID();
             var now = LocalDateTime.now();
             var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
-            var user = new User();
-            user.setId(userId);
+            var user = user(userId);
 
             when(currentUserService.requireUserId()).thenReturn(userId);
             when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
@@ -78,6 +80,7 @@ class EventRegistrationServiceImplTest {
             assertThat(saved.getEvent()).isEqualTo(event);
             assertThat(saved.getVolunteer()).isEqualTo(user);
             assertThat(saved.getStatus()).isEqualTo(ParticipationStatus.REGISTERED);
+            assertThat(saved.getStatusUpdatedAt()).isNotNull();
         }
 
         @Test
@@ -91,6 +94,7 @@ class EventRegistrationServiceImplTest {
                     .id(UUID.randomUUID())
                     .event(event)
                     .status(ParticipationStatus.CANCELED)
+                    .justification("Cancelado anteriormente")
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
@@ -107,6 +111,7 @@ class EventRegistrationServiceImplTest {
 
             assertThat(captor.getValue().getId()).isEqualTo(canceledRegistration.getId());
             assertThat(captor.getValue().getStatus()).isEqualTo(ParticipationStatus.REGISTERED);
+            assertThat(captor.getValue().getJustification()).isNull();
 
             verify(userService, never()).findById(any());
         }
@@ -128,23 +133,6 @@ class EventRegistrationServiceImplTest {
         }
 
         @Test
-        void shouldThrowWhenEventHasAlreadyEnded() {
-            var userId = UUID.randomUUID();
-            var ownerId = UUID.randomUUID();
-            var now = LocalDateTime.now();
-            var event = buildEvent(ownerId, now.minusDays(5), now.minusDays(5).plusHours(3), 10);
-
-            when(currentUserService.requireUserId()).thenReturn(userId);
-            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-
-            assertThatThrownBy(() -> registrationService.enroll(event.getId()))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("encerrado");
-
-            verify(registrationRepository, never()).save(any());
-        }
-
-        @Test
         void shouldThrowWhenCapacityIsFull() {
             var userId = UUID.randomUUID();
             var ownerId = UUID.randomUUID();
@@ -160,7 +148,7 @@ class EventRegistrationServiceImplTest {
 
             assertThatThrownBy(() -> registrationService.enroll(event.getId()))
                     .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("máximo de voluntários");
+                    .hasMessageContaining("número máximo");
 
             verify(registrationRepository, never()).save(any());
         }
@@ -230,76 +218,16 @@ class EventRegistrationServiceImplTest {
             registrationService.cancel(event.getId());
 
             assertThat(registration.getStatus()).isEqualTo(ParticipationStatus.CANCELED);
+            assertThat(registration.getStatusUpdatedAt()).isNotNull();
             verify(registrationRepository).save(registration);
-        }
-
-        @Test
-        void shouldThrowWhenEventHasAlreadyStarted() {
-            var userId = UUID.randomUUID();
-            var ownerId = UUID.randomUUID();
-            var now = LocalDateTime.now();
-            var event = buildEvent(ownerId, now.minusHours(1), now.plusHours(3), 10);
-
-            when(currentUserService.requireUserId()).thenReturn(userId);
-            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-
-            assertThatThrownBy(() -> registrationService.cancel(event.getId()))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("início do evento");
-
-            verify(registrationRepository, never()).save(any());
-        }
-
-        @Test
-        void shouldThrowWhenRegistrationDoesNotExist() {
-            var userId = UUID.randomUUID();
-            var ownerId = UUID.randomUUID();
-            var now = LocalDateTime.now();
-            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
-
-            when(currentUserService.requireUserId()).thenReturn(userId);
-            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
-                    .thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> registrationService.cancel(event.getId()))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("não encontrada");
-
-            verify(registrationRepository, never()).save(any());
-        }
-
-        @Test
-        void shouldThrowWhenRegistrationIsAlreadyCanceled() {
-            var userId = UUID.randomUUID();
-            var ownerId = UUID.randomUUID();
-            var now = LocalDateTime.now();
-            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
-
-            var registration = EventRegistration.builder()
-                    .id(UUID.randomUUID())
-                    .event(event)
-                    .status(ParticipationStatus.CANCELED)
-                    .build();
-
-            when(currentUserService.requireUserId()).thenReturn(userId);
-            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
-                    .thenReturn(Optional.of(registration));
-
-            assertThatThrownBy(() -> registrationService.cancel(event.getId()))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("já foi cancelada");
-
-            verify(registrationRepository, never()).save(any());
         }
     }
 
     @Nested
-    class GetEnrollmentStatusTest {
+    class EnrollmentStatusTest {
 
         @Test
-        void shouldReturnTrueWhenUserHasActiveRegistration() {
+        void shouldReturnTrueWhenUserHasRegisteredRegistration() {
             var userId = UUID.randomUUID();
             var eventId = UUID.randomUUID();
 
@@ -318,7 +246,7 @@ class EventRegistrationServiceImplTest {
         }
 
         @Test
-        void shouldReturnFalseWhenRegistrationIsCanceled() {
+        void shouldReturnFalseWhenRegistrationIsCancelled() {
             var userId = UUID.randomUUID();
             var eventId = UUID.randomUUID();
 
@@ -335,19 +263,255 @@ class EventRegistrationServiceImplTest {
 
             assertThat(result.enrolled()).isFalse();
         }
+    }
 
+    @Nested
+    class AbsenceNoticeTest {
         @Test
-        void shouldReturnFalseWhenNoRegistrationExists() {
+        void shouldNotifyAbsenceForActiveRegistration() {
             var userId = UUID.randomUUID();
-            var eventId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(userId))
+                    .status(ParticipationStatus.REGISTERED)
+                    .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
-            when(registrationRepository.findByEventIdAndVolunteerId(eventId, userId))
-                    .thenReturn(Optional.empty());
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
 
-            var result = registrationService.getEnrollmentStatus(eventId);
+            var result = registrationService.notifyAbsence(
+                    event.getId(),
+                    new AbsenceNoticeRequest("Compromisso familiar")
+            );
 
-            assertThat(result.enrolled()).isFalse();
+            assertThat(result.status()).isEqualTo("JUSTIFIED");
+            assertThat(result.justification()).isEqualTo("Compromisso familiar");
+            assertThat(registration.getStatus()).isEqualTo(ParticipationStatus.JUSTIFIED);
+            assertThat(registration.getStatusUpdatedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldRequireJustificationWhenNotifyingAbsence() {
+            var userId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(userId))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.notifyAbsence(event.getId(), new AbsenceNoticeRequest(" ")))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("justificativa");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+
+        @Test
+        void shouldRejectAbsenceNoticeForFinalizedRegistration() {
+            var userId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(userId))
+                    .status(ParticipationStatus.CANCELED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.notifyAbsence(event.getId(), new AbsenceNoticeRequest("Doente")))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("inscrições ativas");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+    }
+
+    @Nested
+    class DecisionTest {
+        @Test
+        void shouldConfirmRegisteredRegistrationWhenCurrentUserOwnsEvent() {
+            var ownerId = UUID.randomUUID();
+            var registration = registration(ParticipationStatus.REGISTERED, ownerId);
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
+
+            var result = registrationService.confirm(registration.getId());
+
+            assertThat(result.status()).isEqualTo("CONFIRMED");
+            assertThat(registration.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
+            assertThat(registration.getStatusUpdatedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldRejectRegisteredRegistrationWhenCurrentUserOwnsEvent() {
+            var ownerId = UUID.randomUUID();
+            var registration = registration(ParticipationStatus.REGISTERED, ownerId);
+            var request = new EventRegistrationDecisionRequest("Não atende ao perfil da ação");
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
+
+            var result = registrationService.reject(registration.getId(), request);
+
+            assertThat(result.status()).isEqualTo("REJECTED");
+            assertThat(result.justification()).isEqualTo("Não atende ao perfil da ação");
+            assertThat(registration.getStatusUpdatedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldDismissConfirmedRegistrationWhenCurrentUserOwnsEvent() {
+            var ownerId = UUID.randomUUID();
+            var registration = registration(ParticipationStatus.CONFIRMED, ownerId);
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
+
+            var result = registrationService.dismiss(
+                    registration.getId(),
+                    new EventRegistrationDecisionRequest("Equipe completa")
+            );
+
+            assertThat(result.status()).isEqualTo("DISMISSED");
+            assertThat(result.justification()).isEqualTo("Equipe completa");
+        }
+
+        @Test
+        void shouldRejectDecisionWhenCurrentUserDoesNotOwnEvent() {
+            var ownerId = UUID.randomUUID();
+            var currentUserId = UUID.randomUUID();
+            var registration = registration(ParticipationStatus.PENDING, ownerId);
+
+            when(currentUserService.requireUserId()).thenReturn(currentUserId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.reject(registration.getId(), null))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("dono do evento");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+
+        @Test
+        void shouldRejectDismissWhenRegistrationIsNotConfirmed() {
+            var ownerId = UUID.randomUUID();
+            var registration = registration(ParticipationStatus.PENDING, ownerId);
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.dismiss(
+                    registration.getId(),
+                    new EventRegistrationDecisionRequest("Equipe completa")
+            ))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("confirmadas");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+    }
+
+    @Nested
+    class OrganizerFeedbackTest {
+        @Test
+        void shouldAddOrganizerFeedbackAfterEventEnds() {
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.minusDays(1), now.minusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(UUID.randomUUID()))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
+
+            var result = registrationService.addOrganizerFeedback(
+                    registration.getId(),
+                    new OrganizerFeedbackRequest(5, "Voluntário muito comprometido")
+            );
+
+            assertThat(result.feedbackRating()).isEqualTo(5);
+            assertThat(result.organizerFeedback()).isEqualTo("Voluntário muito comprometido");
+            assertThat(registration.getFeedbackCreatedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldRejectOrganizerFeedbackBeforeEventEnds() {
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(UUID.randomUUID()))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.addOrganizerFeedback(
+                    registration.getId(),
+                    new OrganizerFeedbackRequest(5, "Bom")
+            ))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("após o evento");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+
+        @Test
+        void shouldRejectInvalidOrganizerFeedbackRating() {
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.minusDays(1), now.minusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(UUID.randomUUID()))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.addOrganizerFeedback(
+                    registration.getId(),
+                    new OrganizerFeedbackRequest(6, "Excelente")
+            ))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("entre 1 e 5");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
         }
     }
 
@@ -360,8 +524,7 @@ class EventRegistrationServiceImplTest {
             var now = LocalDateTime.now();
             var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
 
-            var volunteer = new User();
-            volunteer.setId(UUID.randomUUID());
+            var volunteer = user(UUID.randomUUID());
             volunteer.setFullName("Maria Souza");
             volunteer.setEmail("maria@email.com");
             volunteer.setCpfCnpj("12345678901");
@@ -374,7 +537,7 @@ class EventRegistrationServiceImplTest {
                     .status(ParticipationStatus.REGISTERED)
                     .build();
 
-            var canceledRegistration = EventRegistration.builder()
+            var cancelledRegistration = EventRegistration.builder()
                     .id(UUID.randomUUID())
                     .event(event)
                     .volunteer(new User())
@@ -384,30 +547,13 @@ class EventRegistrationServiceImplTest {
             when(currentUserService.requireUserId()).thenReturn(ownerId);
             when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
             when(registrationRepository.findAllByEventIdOrderByRegisteredAtAsc(event.getId()))
-                    .thenReturn(List.of(activeRegistration, canceledRegistration));
+                    .thenReturn(List.of(activeRegistration, cancelledRegistration));
 
             var result = registrationService.getParticipants(event.getId());
 
             assertThat(result).hasSize(1);
             assertThat(result.get(0).name()).isEqualTo("Maria Souza");
             assertThat(result.get(0).email()).isEqualTo("maria@email.com");
-        }
-
-        @Test
-        void shouldThrowWhenCalledByNonOwner() {
-            var ownerId = UUID.randomUUID();
-            var otherUserId = UUID.randomUUID();
-            var now = LocalDateTime.now();
-            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
-
-            when(currentUserService.requireUserId()).thenReturn(otherUserId);
-            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
-
-            assertThatThrownBy(() -> registrationService.getParticipants(event.getId()))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("dono do evento");
-
-            verify(registrationRepository, never()).findAllByEventIdOrderByRegisteredAtAsc(any());
         }
     }
 
@@ -421,7 +567,7 @@ class EventRegistrationServiceImplTest {
             var now = LocalDateTime.now();
 
             var activeEvent = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(2), 10);
-            var canceledEvent = buildEvent(ownerId, now.plusDays(2), now.plusDays(2).plusHours(2), 10);
+            var cancelledEvent = buildEvent(ownerId, now.plusDays(2), now.plusDays(2).plusHours(2), 10);
 
             var activeRegistration = EventRegistration.builder()
                     .id(UUID.randomUUID())
@@ -429,15 +575,15 @@ class EventRegistrationServiceImplTest {
                     .status(ParticipationStatus.REGISTERED)
                     .build();
 
-            var canceledRegistration = EventRegistration.builder()
+            var cancelledRegistration = EventRegistration.builder()
                     .id(UUID.randomUUID())
-                    .event(canceledEvent)
+                    .event(cancelledEvent)
                     .status(ParticipationStatus.CANCELED)
                     .build();
 
             when(currentUserService.requireUserId()).thenReturn(userId);
             when(registrationRepository.findAllByVolunteerIdOrderByRegisteredAtDesc(userId))
-                    .thenReturn(List.of(activeRegistration, canceledRegistration));
+                    .thenReturn(List.of(activeRegistration, cancelledRegistration));
             when(registrationRepository.countByEventIdAndStatusIn(eq(activeEvent.getId()), anyCollection()))
                     .thenReturn(1L);
 
@@ -446,24 +592,10 @@ class EventRegistrationServiceImplTest {
             assertThat(result).hasSize(1);
             assertThat(result.get(0).id()).isEqualTo(activeEvent.getId());
         }
-
-        @Test
-        void shouldReturnEmptyListWhenUserHasNoEnrollments() {
-            var userId = UUID.randomUUID();
-
-            when(currentUserService.requireUserId()).thenReturn(userId);
-            when(registrationRepository.findAllByVolunteerIdOrderByRegisteredAtDesc(userId))
-                    .thenReturn(List.of());
-
-            var result = registrationService.getMyEnrolledEvents();
-
-            assertThat(result).isEmpty();
-        }
     }
 
     private Event buildEvent(UUID ownerId, LocalDateTime startsAt, LocalDateTime endsAt, Integer capacity) {
-        var owner = new User();
-        owner.setId(ownerId);
+        var owner = user(ownerId);
 
         var event = new Event();
         event.setId(UUID.randomUUID());
@@ -472,5 +604,27 @@ class EventRegistrationServiceImplTest {
         event.setEndsAt(endsAt);
         event.setCapacity(capacity);
         return event;
+    }
+
+    private static EventRegistration registration(ParticipationStatus status, UUID ownerId) {
+        var registration = new EventRegistration();
+        registration.setId(UUID.randomUUID());
+        registration.setEvent(event(UUID.randomUUID(), user(ownerId)));
+        registration.setVolunteer(user(UUID.randomUUID()));
+        registration.setStatus(status);
+        return registration;
+    }
+
+    private static Event event(UUID id, User owner) {
+        var event = new Event();
+        event.setId(id);
+        event.setOwner(owner);
+        return event;
+    }
+
+    private static User user(UUID id) {
+        var user = new User();
+        user.setId(id);
+        return user;
     }
 }

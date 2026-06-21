@@ -10,7 +10,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "event_registrations", uniqueConstraints = @UniqueConstraint(name = "uq_event_registrations_event_volunteer", columnNames = {"event", "volunteer"}))
+@Table(
+        name = "event_registrations",
+        uniqueConstraints = @UniqueConstraint(name = "ux_event_registrations_event_volunteer", columnNames = {"event", "volunteer"})
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -36,6 +39,15 @@ public class EventRegistration {
 
     @Column(name = "justification", length = 2000)
     private String justification;
+
+    @Column(name = "organizer_feedback", length = 3000)
+    private String organizerFeedback;
+
+    @Column(name = "feedback_rating")
+    private Integer feedbackRating;
+
+    @Column(name = "feedback_created_at")
+    private Instant feedbackCreatedAt;
 
     @Column(name = "registered_at", nullable = false, updatable = false)
     private Instant registeredAt;

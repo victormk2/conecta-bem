@@ -2,6 +2,10 @@ package br.com.conectabem.controller;
 
 import br.com.conectabem.dto.event.EnrollmentStatusDTO;
 import br.com.conectabem.dto.event.ParticipantDTO;
+import br.com.conectabem.dto.eventregistration.AbsenceNoticeRequest;
+import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
+import br.com.conectabem.dto.eventregistration.EventRegistrationResponse;
+import br.com.conectabem.dto.eventregistration.OrganizerFeedbackRequest;
 import br.com.conectabem.model.Gender;
 import br.com.conectabem.service.EventRegistrationService;
 import org.assertj.core.api.Assertions;
@@ -56,6 +60,22 @@ class EventRegistrationControllerTest {
     }
 
     @Nested
+    class AbsenceNoticeTest {
+        @Test
+        void shouldCallNotifyAbsence() {
+            var eventId = UUID.randomUUID();
+            var request = new AbsenceNoticeRequest("Compromisso familiar");
+            var response = response("JUSTIFIED");
+            when(registrationService.notifyAbsence(eventId, request)).thenReturn(response);
+
+            var result = controller.notifyAbsence(eventId, request);
+
+            verify(registrationService).notifyAbsence(eventId, request);
+            Assertions.assertThat(result).isEqualTo(response);
+        }
+    }
+
+    @Nested
     class EnrollmentStatusTest {
         @Test
         void shouldReturnEnrollmentStatusFromService() {
@@ -95,5 +115,77 @@ class EventRegistrationControllerTest {
             Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
             Assertions.assertThat(response.getBody()).containsExactly(participant);
         }
+    }
+
+    @Nested
+    class DecisionTest {
+        @Test
+        void shouldCallReject() {
+            var registrationId = UUID.randomUUID();
+            var request = new EventRegistrationDecisionRequest("Sem vaga");
+            var response = response("REJECTED");
+            when(registrationService.reject(registrationId, request)).thenReturn(response);
+
+            var result = controller.reject(registrationId, request);
+
+            verify(registrationService).reject(registrationId, request);
+            Assertions.assertThat(result).isEqualTo(response);
+        }
+
+        @Test
+        void shouldCallDismiss() {
+            var registrationId = UUID.randomUUID();
+            var request = new EventRegistrationDecisionRequest("Equipe completa");
+            var response = response("DISMISSED");
+            when(registrationService.dismiss(registrationId, request)).thenReturn(response);
+
+            var result = controller.dismiss(registrationId, request);
+
+            verify(registrationService).dismiss(registrationId, request);
+            Assertions.assertThat(result).isEqualTo(response);
+        }
+    }
+
+    @Nested
+    class OrganizerFeedbackTest {
+        @Test
+        void shouldCallAddOrganizerFeedback() {
+            var registrationId = UUID.randomUUID();
+            var request = new OrganizerFeedbackRequest(5, "Voluntário muito comprometido");
+            var response = response("CONFIRMED");
+            when(registrationService.addOrganizerFeedback(registrationId, request)).thenReturn(response);
+
+            var result = controller.addOrganizerFeedback(registrationId, request);
+
+            verify(registrationService).addOrganizerFeedback(registrationId, request);
+            Assertions.assertThat(result).isEqualTo(response);
+        }
+    }
+
+    @Nested
+    class ListTest {
+        @Test
+        void shouldCallListByEvent() {
+            var eventId = UUID.randomUUID();
+            var registrations = List.of(response("PENDING"));
+            when(registrationService.listByEvent(eventId)).thenReturn(registrations);
+
+            var result = controller.listByEvent(eventId);
+
+            verify(registrationService).listByEvent(eventId);
+            Assertions.assertThat(result).isEqualTo(registrations);
+        }
+    }
+
+    private static EventRegistrationResponse response(String status) {
+        return new EventRegistrationResponse(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                UUID.fromString("00000000-0000-0000-0000-000000000003"),
+                status,
+                null,
+                null,
+                null
+        );
     }
 }

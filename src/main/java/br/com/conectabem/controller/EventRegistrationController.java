@@ -2,6 +2,10 @@ package br.com.conectabem.controller;
 
 import br.com.conectabem.dto.event.EnrollmentStatusDTO;
 import br.com.conectabem.dto.event.ParticipantDTO;
+import br.com.conectabem.dto.eventregistration.AbsenceNoticeRequest;
+import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
+import br.com.conectabem.dto.eventregistration.EventRegistrationResponse;
+import br.com.conectabem.dto.eventregistration.OrganizerFeedbackRequest;
 import br.com.conectabem.service.EventRegistrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -11,31 +15,72 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/events")
 @RequiredArgsConstructor
 public class EventRegistrationController {
 
     private final EventRegistrationService registrationService;
 
-    @PostMapping("/{id}/enroll")
+    @PostMapping("/events/{id}/enroll")
     public ResponseEntity<Void> enroll(@PathVariable UUID id) {
         registrationService.enroll(id);
         return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/{id}/enroll")
+    @DeleteMapping("/events/{id}/enroll")
     public ResponseEntity<Void> cancel(@PathVariable UUID id) {
         registrationService.cancel(id);
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/{id}/enrollment/status")
+    @PatchMapping("/events/{id}/absence-notice")
+    public EventRegistrationResponse notifyAbsence(
+            @PathVariable UUID id,
+            @RequestBody AbsenceNoticeRequest request
+    ) {
+        return registrationService.notifyAbsence(id, request);
+    }
+
+    @GetMapping("/events/{id}/enrollment/status")
     public ResponseEntity<EnrollmentStatusDTO> enrollmentStatus(@PathVariable UUID id) {
         return ResponseEntity.ok(registrationService.getEnrollmentStatus(id));
     }
 
-    @GetMapping("/{id}/enrollments")
+    @GetMapping("/events/{id}/enrollments")
     public ResponseEntity<List<ParticipantDTO>> participants(@PathVariable UUID id) {
         return ResponseEntity.ok(registrationService.getParticipants(id));
+    }
+
+    @PatchMapping("/event-registrations/{id}/confirm")
+    public EventRegistrationResponse confirm(@PathVariable UUID id) {
+        return registrationService.confirm(id);
+    }
+
+    @PatchMapping("/event-registrations/{id}/reject")
+    public EventRegistrationResponse reject(
+            @PathVariable UUID id,
+            @RequestBody(required = false) EventRegistrationDecisionRequest request
+    ) {
+        return registrationService.reject(id, request);
+    }
+
+    @PatchMapping("/event-registrations/{id}/dismiss")
+    public EventRegistrationResponse dismiss(
+            @PathVariable UUID id,
+            @RequestBody(required = false) EventRegistrationDecisionRequest request
+    ) {
+        return registrationService.dismiss(id, request);
+    }
+
+    @PostMapping("/event-registrations/{id}/organizer-feedback")
+    public EventRegistrationResponse addOrganizerFeedback(
+            @PathVariable UUID id,
+            @RequestBody OrganizerFeedbackRequest request
+    ) {
+        return registrationService.addOrganizerFeedback(id, request);
+    }
+
+    @GetMapping("/event-registrations/events/{eventId}")
+    public List<EventRegistrationResponse> listByEvent(@PathVariable UUID eventId) {
+        return registrationService.listByEvent(eventId);
     }
 }

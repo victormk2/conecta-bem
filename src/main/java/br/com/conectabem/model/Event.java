@@ -40,6 +40,16 @@ public class Event {
     @Column(name = "capacity")
     private Integer capacity;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false, length = 32)
+    private EventType type = EventType.COMMUNITY;
+
+    @Column(name = "organization_name", length = 255)
+    private String organizationName;
+
+    @Column(name = "organization_document", length = 14)
+    private String organizationDocument;
+
     @Column(name = "image")
     private byte[] image;
 

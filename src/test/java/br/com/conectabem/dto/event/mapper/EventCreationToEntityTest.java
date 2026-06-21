@@ -2,6 +2,7 @@ package br.com.conectabem.dto.event.mapper;
 
 import br.com.conectabem.dto.event.EventCreationDTO;
 import br.com.conectabem.model.EventCategory;
+import br.com.conectabem.model.EventType;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +43,7 @@ class EventCreationToEntityTest {
                     .hasFieldOrPropertyWithValue("description", "Vamos limpar o parque e plantar árvores")
                     .hasFieldOrPropertyWithValue("capacity", 50)
                     .hasFieldOrPropertyWithValue("category", EventCategory.ENVIRONMENT)
+                    .hasFieldOrPropertyWithValue("type", EventType.COMMUNITY)
                     .hasFieldOrPropertyWithValue("startsAt", LocalDateTime.parse(startsAt))
                     .hasFieldOrPropertyWithValue("endsAt", LocalDateTime.parse(endsAt));
         }
@@ -70,6 +72,30 @@ class EventCreationToEntityTest {
             var result = eventCreationToEntity.map(null);
 
             assertThat(result).isNull();
+        }
+
+        @Test
+        void shouldMapOrganizationEventFields() {
+            var source = new EventCreationDTO(
+                    "Campanha institucional",
+                    "Arrecadacao de alimentos",
+                    "uuid-address-123",
+                    "SOCIAL",
+                    "2026-05-01T09:00:00",
+                    "2026-05-01T12:00:00",
+                    100,
+                    "ORGANIZATION",
+                    "Instituto Bem",
+                    "12345678000190"
+            );
+
+            var result = eventCreationToEntity.map(source);
+
+            assertThat(result)
+                    .isNotNull()
+                    .hasFieldOrPropertyWithValue("type", EventType.ORGANIZATION)
+                    .hasFieldOrPropertyWithValue("organizationName", "Instituto Bem")
+                    .hasFieldOrPropertyWithValue("organizationDocument", "12345678000190");
         }
     }
 }
