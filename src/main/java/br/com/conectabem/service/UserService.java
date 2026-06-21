@@ -13,4 +13,6 @@ public interface UserService {
     void updateProfile(UUID id, UpdateProfileRequest request);
 
     void updatePassword(UUID id, UpdatePasswordRequest request);
+
+    User findByEmail(String email);
 }
