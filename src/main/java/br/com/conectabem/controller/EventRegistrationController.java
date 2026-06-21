@@ -2,8 +2,10 @@ package br.com.conectabem.controller;
 
 import br.com.conectabem.dto.event.EnrollmentStatusDTO;
 import br.com.conectabem.dto.event.ParticipantDTO;
+import br.com.conectabem.dto.eventregistration.AbsenceNoticeRequest;
 import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
 import br.com.conectabem.dto.eventregistration.EventRegistrationResponse;
+import br.com.conectabem.dto.eventregistration.OrganizerFeedbackRequest;
 import br.com.conectabem.service.EventRegistrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +30,14 @@ public class EventRegistrationController {
     public ResponseEntity<Void> cancel(@PathVariable UUID id) {
         registrationService.cancel(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/events/{id}/absence-notice")
+    public EventRegistrationResponse notifyAbsence(
+            @PathVariable UUID id,
+            @RequestBody AbsenceNoticeRequest request
+    ) {
+        return registrationService.notifyAbsence(id, request);
     }
 
     @GetMapping("/events/{id}/enrollment/status")
@@ -59,6 +69,14 @@ public class EventRegistrationController {
             @RequestBody(required = false) EventRegistrationDecisionRequest request
     ) {
         return registrationService.dismiss(id, request);
+    }
+
+    @PostMapping("/event-registrations/{id}/organizer-feedback")
+    public EventRegistrationResponse addOrganizerFeedback(
+            @PathVariable UUID id,
+            @RequestBody OrganizerFeedbackRequest request
+    ) {
+        return registrationService.addOrganizerFeedback(id, request);
     }
 
     @GetMapping("/event-registrations/events/{eventId}")

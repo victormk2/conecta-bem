@@ -2,8 +2,10 @@ package br.com.conectabem.controller;
 
 import br.com.conectabem.dto.event.EnrollmentStatusDTO;
 import br.com.conectabem.dto.event.ParticipantDTO;
+import br.com.conectabem.dto.eventregistration.AbsenceNoticeRequest;
 import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
 import br.com.conectabem.dto.eventregistration.EventRegistrationResponse;
+import br.com.conectabem.dto.eventregistration.OrganizerFeedbackRequest;
 import br.com.conectabem.model.Gender;
 import br.com.conectabem.service.EventRegistrationService;
 import org.assertj.core.api.Assertions;
@@ -54,6 +56,22 @@ class EventRegistrationControllerTest {
 
             verify(registrationService).cancel(eventId);
             Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(204));
+        }
+    }
+
+    @Nested
+    class AbsenceNoticeTest {
+        @Test
+        void shouldCallNotifyAbsence() {
+            var eventId = UUID.randomUUID();
+            var request = new AbsenceNoticeRequest("Compromisso familiar");
+            var response = response("JUSTIFIED");
+            when(registrationService.notifyAbsence(eventId, request)).thenReturn(response);
+
+            var result = controller.notifyAbsence(eventId, request);
+
+            verify(registrationService).notifyAbsence(eventId, request);
+            Assertions.assertThat(result).isEqualTo(response);
         }
     }
 
@@ -124,6 +142,22 @@ class EventRegistrationControllerTest {
             var result = controller.dismiss(registrationId, request);
 
             verify(registrationService).dismiss(registrationId, request);
+            Assertions.assertThat(result).isEqualTo(response);
+        }
+    }
+
+    @Nested
+    class OrganizerFeedbackTest {
+        @Test
+        void shouldCallAddOrganizerFeedback() {
+            var registrationId = UUID.randomUUID();
+            var request = new OrganizerFeedbackRequest(5, "Voluntário muito comprometido");
+            var response = response("CONFIRMED");
+            when(registrationService.addOrganizerFeedback(registrationId, request)).thenReturn(response);
+
+            var result = controller.addOrganizerFeedback(registrationId, request);
+
+            verify(registrationService).addOrganizerFeedback(registrationId, request);
             Assertions.assertThat(result).isEqualTo(response);
         }
     }

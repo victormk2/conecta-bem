@@ -1,6 +1,8 @@
 package br.com.conectabem.service.impl;
 
+import br.com.conectabem.dto.eventregistration.AbsenceNoticeRequest;
 import br.com.conectabem.dto.eventregistration.EventRegistrationDecisionRequest;
+import br.com.conectabem.dto.eventregistration.OrganizerFeedbackRequest;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventRegistration;
 import br.com.conectabem.model.ParticipationStatus;
@@ -219,7 +221,106 @@ class EventRegistrationServiceImplTest {
     }
 
     @Nested
+    class AbsenceNoticeTest {
+        @Test
+        void shouldNotifyAbsenceForActiveRegistration() {
+            var userId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(userId))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
+
+            var result = registrationService.notifyAbsence(
+                    event.getId(),
+                    new AbsenceNoticeRequest("Compromisso familiar")
+            );
+
+            assertThat(result.status()).isEqualTo("JUSTIFIED");
+            assertThat(result.justification()).isEqualTo("Compromisso familiar");
+            assertThat(registration.getStatus()).isEqualTo(ParticipationStatus.JUSTIFIED);
+            assertThat(registration.getStatusUpdatedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldRequireJustificationWhenNotifyingAbsence() {
+            var userId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(userId))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.notifyAbsence(event.getId(), new AbsenceNoticeRequest(" ")))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("justificativa");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+
+        @Test
+        void shouldRejectAbsenceNoticeForFinalizedRegistration() {
+            var userId = UUID.randomUUID();
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(userId))
+                    .status(ParticipationStatus.CANCELLED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(userId);
+            when(eventRepository.findById(event.getId())).thenReturn(Optional.of(event));
+            when(registrationRepository.findByEventIdAndVolunteerId(event.getId(), userId))
+                    .thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.notifyAbsence(event.getId(), new AbsenceNoticeRequest("Doente")))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("inscrições ativas");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+    }
+
+    @Nested
     class DecisionTest {
+        @Test
+        void shouldConfirmPendingRegistrationWhenCurrentUserOwnsEvent() {
+            var ownerId = UUID.randomUUID();
+            var registration = registration(ParticipationStatus.PENDING, ownerId);
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
+
+            var result = registrationService.confirm(registration.getId());
+
+            assertThat(result.status()).isEqualTo("CONFIRMED");
+            assertThat(registration.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
+            assertThat(registration.getStatusUpdatedAt()).isNotNull();
+        }
+
         @Test
         void shouldRejectPendingRegistrationWhenCurrentUserOwnsEvent() {
             var ownerId = UUID.randomUUID();
@@ -267,6 +368,103 @@ class EventRegistrationServiceImplTest {
             assertThatThrownBy(() -> registrationService.reject(registration.getId(), null))
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("dono do evento");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+
+        @Test
+        void shouldRejectDismissWhenRegistrationIsNotConfirmed() {
+            var ownerId = UUID.randomUUID();
+            var registration = registration(ParticipationStatus.PENDING, ownerId);
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.dismiss(
+                    registration.getId(),
+                    new EventRegistrationDecisionRequest("Equipe completa")
+            ))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("confirmadas");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+    }
+
+    @Nested
+    class OrganizerFeedbackTest {
+        @Test
+        void shouldAddOrganizerFeedbackAfterEventEnds() {
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.minusDays(1), now.minusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(UUID.randomUUID()))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+            when(registrationRepository.save(registration)).thenReturn(registration);
+
+            var result = registrationService.addOrganizerFeedback(
+                    registration.getId(),
+                    new OrganizerFeedbackRequest(5, "Voluntário muito comprometido")
+            );
+
+            assertThat(result.feedbackRating()).isEqualTo(5);
+            assertThat(result.organizerFeedback()).isEqualTo("Voluntário muito comprometido");
+            assertThat(registration.getFeedbackCreatedAt()).isNotNull();
+        }
+
+        @Test
+        void shouldRejectOrganizerFeedbackBeforeEventEnds() {
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.plusDays(1), now.plusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(UUID.randomUUID()))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.addOrganizerFeedback(
+                    registration.getId(),
+                    new OrganizerFeedbackRequest(5, "Bom")
+            ))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("após o evento");
+
+            verify(registrationRepository, never()).save(any(EventRegistration.class));
+        }
+
+        @Test
+        void shouldRejectInvalidOrganizerFeedbackRating() {
+            var ownerId = UUID.randomUUID();
+            var now = LocalDateTime.now();
+            var event = buildEvent(ownerId, now.minusDays(1), now.minusDays(1).plusHours(3), 10);
+            var registration = EventRegistration.builder()
+                    .id(UUID.randomUUID())
+                    .event(event)
+                    .volunteer(user(UUID.randomUUID()))
+                    .status(ParticipationStatus.CONFIRMED)
+                    .build();
+
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(registrationRepository.findById(registration.getId())).thenReturn(Optional.of(registration));
+
+            assertThatThrownBy(() -> registrationService.addOrganizerFeedback(
+                    registration.getId(),
+                    new OrganizerFeedbackRequest(6, "Excelente")
+            ))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("entre 1 e 5");
 
             verify(registrationRepository, never()).save(any(EventRegistration.class));
         }

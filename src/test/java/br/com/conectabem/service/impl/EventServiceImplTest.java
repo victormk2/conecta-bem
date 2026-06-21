@@ -6,6 +6,7 @@ import br.com.conectabem.infra.util.Mapper;
 import br.com.conectabem.model.Address;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventCategory;
+import br.com.conectabem.model.EventType;
 import br.com.conectabem.model.User;
 import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
@@ -26,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
@@ -78,6 +80,7 @@ class EventServiceImplTest {
             var owner = new User();
             owner.setId(ownerId);
             owner.setUsername("john_doe");
+            completeProfile(owner);
 
             var address = new Address();
             address.setId(addressId);
@@ -144,6 +147,7 @@ class EventServiceImplTest {
             var addressId = UUID.fromString("00000000-0000-0000-0000-000000000002");
             var owner = new User();
             owner.setId(ownerId);
+            completeProfile(owner);
 
             var address = new Address();
             address.setId(addressId);
@@ -183,6 +187,7 @@ class EventServiceImplTest {
 
             var owner = new User();
             owner.setId(ownerId);
+            completeProfile(owner);
 
             var address = new Address();
             address.setId(addressId);
@@ -203,6 +208,108 @@ class EventServiceImplTest {
 
             assertThat(result.getImage()).containsExactly(imageBytes);
             verify(eventRepository).save(any(Event.class));
+        }
+
+        @Test
+        void shouldRejectEventCreationWhenOwnerProfileIsIncomplete() {
+            var dto = new EventCreationDTO(
+                    "Evento",
+                    "Descricao completa para o evento",
+                    "00000000-0000-0000-0000-000000000002",
+                    "SOCIAL",
+                    "2026-04-15T10:00:00",
+                    "2026-04-15T14:00:00",
+                    20
+            );
+
+            var ownerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var owner = new User();
+            owner.setId(ownerId);
+            owner.setFullName("Joao Silva");
+            owner.setEmail("joao@email.com");
+
+            when(creationToEntity.map(dto)).thenReturn(new Event());
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(userService.findById(ownerId)).thenReturn(owner);
+
+            assertThatThrownBy(() -> eventService.create(dto))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Complete your profile");
+
+            verify(eventRepository, never()).save(any(Event.class));
+        }
+
+        @Test
+        void shouldCreateOrganizationEventWhenOrganizationFieldsAreProvided() {
+            var dto = new EventCreationDTO(
+                    "Campanha institucional",
+                    "Descricao completa para campanha",
+                    "00000000-0000-0000-0000-000000000002",
+                    "SOCIAL",
+                    "2026-04-15T10:00:00",
+                    "2026-04-15T14:00:00",
+                    20,
+                    "ORGANIZATION",
+                    "Instituto Bem",
+                    "12345678000190"
+            );
+
+            var ownerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var addressId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+            var owner = new User();
+            owner.setId(ownerId);
+            completeProfile(owner);
+            var address = new Address();
+            address.setId(addressId);
+            var eventFromMapper = new Event();
+            eventFromMapper.setType(EventType.ORGANIZATION);
+            eventFromMapper.setOrganizationName("Instituto Bem");
+            eventFromMapper.setOrganizationDocument("12345678000190");
+
+            when(creationToEntity.map(dto)).thenReturn(eventFromMapper);
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(userService.findById(ownerId)).thenReturn(owner);
+            when(addressService.findById(addressId)).thenReturn(address);
+            when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            var result = eventService.create(dto);
+
+            assertThat(result.getType()).isEqualTo(EventType.ORGANIZATION);
+            assertThat(result.getOrganizationName()).isEqualTo("Instituto Bem");
+            assertThat(result.getOrganizationDocument()).isEqualTo("12345678000190");
+        }
+
+        @Test
+        void shouldRejectOrganizationEventWithoutOrganizationFields() {
+            var dto = new EventCreationDTO(
+                    "Campanha institucional",
+                    "Descricao completa para campanha",
+                    "00000000-0000-0000-0000-000000000002",
+                    "SOCIAL",
+                    "2026-04-15T10:00:00",
+                    "2026-04-15T14:00:00",
+                    20,
+                    "ORGANIZATION",
+                    null,
+                    null
+            );
+
+            var ownerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var owner = new User();
+            owner.setId(ownerId);
+            completeProfile(owner);
+            var eventFromMapper = new Event();
+            eventFromMapper.setType(EventType.ORGANIZATION);
+
+            when(creationToEntity.map(dto)).thenReturn(eventFromMapper);
+            when(currentUserService.requireUserId()).thenReturn(ownerId);
+            when(userService.findById(ownerId)).thenReturn(owner);
+
+            assertThatThrownBy(() -> eventService.create(dto))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Organization events require");
+
+            verify(eventRepository, never()).save(any(Event.class));
         }
     }
 
@@ -411,12 +518,20 @@ class EventServiceImplTest {
         event.setId(id);
         event.setTitle(title);
         event.setCategory(category);
+        event.setType(EventType.COMMUNITY);
         event.setOwner(owner);
         event.setAddress(address);
         event.setStartsAt(startsAt);
         event.setEndsAt(endsAt);
         event.setCapacity(50);
         return event;
+    }
+
+    private void completeProfile(User user) {
+        user.setFullName("Joao Silva");
+        user.setEmail("joao@email.com");
+        user.setCpfCnpj("12345678901");
+        user.setPhone("47999999999");
     }
 }
 

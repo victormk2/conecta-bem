@@ -4,6 +4,7 @@ import br.com.conectabem.dto.event.EventCreationDTO;
 import br.com.conectabem.infra.util.Mapper;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventCategory;
+import br.com.conectabem.model.EventType;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -20,6 +21,9 @@ public class EventCreationToEntity implements Mapper<EventCreationDTO, Event> {
             event.setTitle(source.title());
             event.setDescription(source.description());
             event.setCapacity(source.capacity());
+            event.setType(parseEventType(source.type()));
+            event.setOrganizationName(trimToNull(source.organizationName()));
+            event.setOrganizationDocument(trimToNull(source.organizationDocument()));
 
             try {
                 if (source.startsAt() != null) {
@@ -48,5 +52,25 @@ public class EventCreationToEntity implements Mapper<EventCreationDTO, Event> {
         }
 
         return null;
+    }
+
+    private EventType parseEventType(String value) {
+        if (value == null || value.isBlank()) {
+            return EventType.COMMUNITY;
+        }
+
+        try {
+            return EventType.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid event type. Valid values are: " + String.join(", ",
+                    java.util.Arrays.stream(EventType.values()).map(Enum::name).toArray(String[]::new)));
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }
