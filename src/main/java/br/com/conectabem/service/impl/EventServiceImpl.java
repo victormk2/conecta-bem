@@ -60,9 +60,10 @@ public class EventServiceImpl implements EventService {
         var baseEntity = creationToEntity.map(eventCreationDTO);
         var owner = userService.findById(currentUserService.requireUserId());
         validateOwnerProfileForEventCreation(owner);
+        validateEventForSave(baseEntity, eventCreationDTO.addressId());
         validateEventTypeRequirements(baseEntity);
         baseEntity.setOwner(owner);
-        baseEntity.setAddress(addressService.findById(UUID.fromString(eventCreationDTO.addressId())));
+        baseEntity.setAddress(addressService.findById(parseUuid(eventCreationDTO.addressId(), "Select a valid address for the event.")));
         applyImageIfPresent(baseEntity, image);
         return eventRepository.save(baseEntity);
     }
@@ -87,10 +88,12 @@ public class EventServiceImpl implements EventService {
             event.setUpdatedAt(LocalDateTime.now());
             event.setCapacity(eventUpdateDTO.capacity());
             applyEventTypeUpdate(event, eventUpdateDTO);
+            validateEventForSave(event, eventUpdateDTO.addressId());
             validateEventTypeRequirements(event);
 
-            if (!event.getAddress().getId().equals(UUID.fromString(eventUpdateDTO.addressId()))) {
-                event.setAddress(addressService.findById(UUID.fromString(eventUpdateDTO.addressId())));
+            var addressId = parseUuid(eventUpdateDTO.addressId(), "Select a valid address for the event.");
+            if (!event.getAddress().getId().equals(addressId)) {
+                event.setAddress(addressService.findById(addressId));
             }
 
             applyImageIfPresent(event, image);
@@ -195,6 +198,10 @@ public class EventServiceImpl implements EventService {
             throw new IllegalArgumentException("Organization events require organizationName and organizationDocument.");
         }
 
+        if (event.getType() == EventType.ORGANIZATION && !event.getOrganizationDocument().matches("\\d{14}")) {
+            throw new IllegalArgumentException("Organization document must have 14 digits.");
+        }
+
         if (event.getType() == EventType.COMMUNITY) {
             event.setOrganizationName(null);
             event.setOrganizationDocument(null);
@@ -225,6 +232,49 @@ public class EventServiceImpl implements EventService {
             return null;
         }
         return value.trim();
+    }
+
+    private void validateEventForSave(Event event, String addressId) {
+        if (event == null) {
+            throw new IllegalArgumentException("Event data is required.");
+        }
+        if (isBlank(event.getTitle())) {
+            throw new IllegalArgumentException("Event title is required.");
+        }
+        if (isBlank(event.getDescription())) {
+            throw new IllegalArgumentException("Event description is required.");
+        }
+        if (event.getCategory() == null) {
+            throw new IllegalArgumentException("Event category is required.");
+        }
+        if (event.getStartsAt() == null) {
+            throw new IllegalArgumentException("Event start date is required.");
+        }
+        if (event.getEndsAt() == null) {
+            throw new IllegalArgumentException("Event end date is required.");
+        }
+        if (!event.getEndsAt().isAfter(event.getStartsAt())) {
+            throw new IllegalArgumentException("Event end date must be after start date.");
+        }
+        if (event.getStartsAt().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Event start date must be in the future.");
+        }
+        if (event.getCapacity() == null || event.getCapacity() < 1) {
+            throw new IllegalArgumentException("Event capacity must be greater than zero.");
+        }
+        parseUuid(addressId, "Select a valid address for the event.");
+    }
+
+    private UUID parseUuid(String value, String errorMessage) {
+        if (isBlank(value)) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(errorMessage);
+        }
     }
 
     private boolean isBlank(String value) {

@@ -72,8 +72,8 @@ class EventServiceImplTest {
                     "Vamos limpar o parque",
                     "00000000-0000-0000-0000-000000000002",
                     "ENVIRONMENT",
-                    "2026-04-15T10:00:00",
-                    "2026-04-15T14:00:00",
+                    "2099-04-15T10:00:00",
+                    "2099-04-15T14:00:00",
                     50
             );
 
@@ -141,8 +141,8 @@ class EventServiceImplTest {
                     "Descricao",
                     "00000000-0000-0000-0000-000000000002",
                     "SOCIAL",
-                    "2026-04-15T10:00:00",
-                    "2026-04-15T14:00:00",
+                    "2099-04-15T10:00:00",
+                    "2099-04-15T14:00:00",
                     20
             );
 
@@ -156,6 +156,7 @@ class EventServiceImplTest {
             address.setId(addressId);
 
             var eventFromMapper = new Event();
+            fillEventFromDto(eventFromMapper, dto);
             var image = mock(MultipartFile.class);
 
             when(image.isEmpty()).thenReturn(true);
@@ -179,8 +180,8 @@ class EventServiceImplTest {
                     "Descricao",
                     "00000000-0000-0000-0000-000000000002",
                     "SOCIAL",
-                    "2026-04-15T10:00:00",
-                    "2026-04-15T14:00:00",
+                    "2099-04-15T10:00:00",
+                    "2099-04-15T14:00:00",
                     20
             );
 
@@ -196,6 +197,7 @@ class EventServiceImplTest {
             address.setId(addressId);
 
             var eventFromMapper = new Event();
+            fillEventFromDto(eventFromMapper, dto);
             var image = mock(MultipartFile.class);
 
             when(image.isEmpty()).thenReturn(false);
@@ -220,8 +222,8 @@ class EventServiceImplTest {
                     "Descricao completa para o evento",
                     "00000000-0000-0000-0000-000000000002",
                     "SOCIAL",
-                    "2026-04-15T10:00:00",
-                    "2026-04-15T14:00:00",
+                    "2099-04-15T10:00:00",
+                    "2099-04-15T14:00:00",
                     20
             );
 
@@ -249,8 +251,8 @@ class EventServiceImplTest {
                     "Descricao completa para campanha",
                     "00000000-0000-0000-0000-000000000002",
                     "SOCIAL",
-                    "2026-04-15T10:00:00",
-                    "2026-04-15T14:00:00",
+                    "2099-04-15T10:00:00",
+                    "2099-04-15T14:00:00",
                     20,
                     "ORGANIZATION",
                     "Instituto Bem",
@@ -265,6 +267,7 @@ class EventServiceImplTest {
             var address = new Address();
             address.setId(addressId);
             var eventFromMapper = new Event();
+            fillEventFromDto(eventFromMapper, dto);
             eventFromMapper.setType(EventType.ORGANIZATION);
             eventFromMapper.setOrganizationName("Instituto Bem");
             eventFromMapper.setOrganizationDocument("12345678000190");
@@ -289,8 +292,8 @@ class EventServiceImplTest {
                     "Descricao completa para campanha",
                     "00000000-0000-0000-0000-000000000002",
                     "SOCIAL",
-                    "2026-04-15T10:00:00",
-                    "2026-04-15T14:00:00",
+                    "2099-04-15T10:00:00",
+                    "2099-04-15T14:00:00",
                     20,
                     "ORGANIZATION",
                     null,
@@ -302,6 +305,7 @@ class EventServiceImplTest {
             owner.setId(ownerId);
             completeProfile(owner);
             var eventFromMapper = new Event();
+            fillEventFromDto(eventFromMapper, dto);
             eventFromMapper.setType(EventType.ORGANIZATION);
 
             when(creationToEntity.map(dto)).thenReturn(eventFromMapper);
@@ -546,6 +550,16 @@ class EventServiceImplTest {
         event.setEndsAt(endsAt);
         event.setCapacity(50);
         return event;
+    }
+
+    private void fillEventFromDto(Event event, EventCreationDTO dto) {
+        event.setTitle(dto.title());
+        event.setDescription(dto.description());
+        event.setCategory(EventCategory.valueOf(dto.category()));
+        event.setStartsAt(LocalDateTime.parse(dto.startsAt()));
+        event.setEndsAt(LocalDateTime.parse(dto.endsAt()));
+        event.setCapacity(dto.capacity());
+        event.setType(EventType.COMMUNITY);
     }
 
     private void completeProfile(User user) {
