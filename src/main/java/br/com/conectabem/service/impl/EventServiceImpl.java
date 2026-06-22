@@ -34,7 +34,12 @@ import java.util.UUID;
 public class EventServiceImpl implements EventService {
 
     private static final Set<ParticipationStatus> ACTIVE_STATUSES =
-            Set.of(ParticipationStatus.PENDING, ParticipationStatus.CONFIRMED);
+            Set.of(
+                    ParticipationStatus.REGISTERED,
+                    ParticipationStatus.PENDING,
+                    ParticipationStatus.CONFIRMED,
+                    ParticipationStatus.PRESENT
+            );
 
     private final EventRepository eventRepository;
     private final EventRegistrationRepository registrationRepository;

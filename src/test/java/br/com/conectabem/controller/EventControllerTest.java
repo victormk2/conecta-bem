@@ -91,12 +91,18 @@ class EventControllerTest {
                     "2026-04-15T14:00:00",
                     10
             );
-            when(eventService.createWithImage(input, null)).thenReturn(new Event());
+            var event = new Event();
+            event.setId(UUID.randomUUID());
+            var eventResponse = buildEventResponse(event.getId());
+            when(eventService.createWithImage(input, null)).thenReturn(event);
+            when(eventService.toEventResponse(event)).thenReturn(eventResponse);
 
             var response = eventController.create(input, null);
 
             verify(eventService).createWithImage(input, null);
+            verify(eventService).toEventResponse(event);
             Assertions.assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(201));
+            Assertions.assertThat(response.getBody()).isEqualTo(eventResponse);
         }
     }
 

@@ -99,12 +99,14 @@ class EventRegistrationControllerTest {
             var eventId = UUID.randomUUID();
             var participant = new ParticipantDTO(
                     UUID.randomUUID(),
+                    UUID.randomUUID(),
                     "Maria Souza",
                     "maria@email.com",
                     "12345678901",
                     LocalDate.of(1995, 5, 20),
                     "47999990000",
-                    Gender.FEMALE
+                    Gender.FEMALE,
+                    "REGISTERED"
             );
 
             when(registrationService.getParticipants(eventId)).thenReturn(List.of(participant));

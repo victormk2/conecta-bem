@@ -7,6 +7,7 @@ import br.com.conectabem.model.Address;
 import br.com.conectabem.model.Event;
 import br.com.conectabem.model.EventCategory;
 import br.com.conectabem.model.EventType;
+import br.com.conectabem.model.ParticipationStatus;
 import br.com.conectabem.model.User;
 import br.com.conectabem.repository.EventRegistrationRepository;
 import br.com.conectabem.repository.EventRepository;
@@ -17,12 +18,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -432,6 +435,24 @@ class EventServiceImplTest {
             assertThat(response.category()).isEqualTo(EventCategory.SOCIAL);
             assertThat(response.enrolledCount()).isEqualTo(3L);
             assertThat(response.imageUrl()).isNull();
+        }
+
+        @Test
+        void shouldCountRegisteredParticipationAsActiveEnrollment() {
+            var now = LocalDateTime.now();
+            var event = buildEvent(
+                    UUID.randomUUID(), "Apoio comunitario", EventCategory.SOCIAL,
+                    now, now.plusHours(2)
+            );
+            var statusesCaptor = ArgumentCaptor.forClass(Collection.class);
+
+            when(registrationRepository.countByEventIdAndStatusIn(eq(event.getId()), statusesCaptor.capture()))
+                    .thenReturn(1L);
+
+            var response = eventService.toEventResponse(event);
+
+            assertThat(response.enrolledCount()).isEqualTo(1L);
+            assertThat(statusesCaptor.getValue()).contains(ParticipationStatus.REGISTERED);
         }
 
         @Test

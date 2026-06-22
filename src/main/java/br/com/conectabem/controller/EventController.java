@@ -36,21 +36,24 @@ public class EventController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Event> create(
+    public ResponseEntity<EventResponse> create(
             @RequestPart("event") EventCreationDTO eventCreationDTO,
             @RequestPart(value = "image", required = false) MultipartFile image
     ) {
         Event event = eventService.createWithImage(eventCreationDTO, image);
-        return ResponseEntity.status(HttpStatus.CREATED).body(event);
+        return ResponseEntity.status(HttpStatus.CREATED).body(eventService.toEventResponse(event));
     }
 
     @PatchMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Event> update(
+    public ResponseEntity<EventResponse> update(
             @RequestPart("event") EventUpdateDTO eventUpdateDTO,
             @RequestPart(value = "image", required = false) MultipartFile image
     ) {
         var event = eventService.updateWithImage(eventUpdateDTO, image);
-        return ResponseEntity.status(HttpStatus.OK).body(event);
+        if (event == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        return ResponseEntity.status(HttpStatus.OK).body(eventService.toEventResponse(event));
     }
 
     @DeleteMapping("/{id}/image")

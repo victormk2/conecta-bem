@@ -180,7 +180,7 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                 .findAllByEventIdOrderByRegisteredAtAsc(eventId)
                 .stream()
                 .filter(r -> ACTIVE_STATUSES.contains(r.getStatus()))
-                .map(r -> toParticipantDTO(r.getVolunteer()))
+                .map(this::toParticipantDTO)
                 .toList();
     }
 
@@ -369,15 +369,18 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
         return request.rating();
     }
 
-    private ParticipantDTO toParticipantDTO(User user) {
+    private ParticipantDTO toParticipantDTO(EventRegistration registration) {
+        User user = registration.getVolunteer();
         return new ParticipantDTO(
+                registration.getId(),
                 user.getId(),
                 user.getFullName(),
                 user.getEmail(),
                 user.getCpfCnpj(),
                 user.getBirthDate(),
                 user.getPhone(),
-                user.getGender()
+                user.getGender(),
+                registration.getStatus().name()
         );
     }
 
@@ -402,7 +405,10 @@ public class EventRegistrationServiceImpl implements EventRegistrationService {
                 event.getEndsAt(),
                 event.getCapacity(),
                 activeCount,
-                imageUrl
+                imageUrl,
+                event.getType(),
+                event.getOrganizationName(),
+                event.getOrganizationDocument()
         );
     }
 }
